@@ -128,18 +128,28 @@ arig create my-project --preset my-stack --repo https://github.com/user/repo
 
 ## Configuration
 
-Configuration files are stored in `~/.agent-rig/`:
+Global settings are stored in `~/.agent-rig/config.yml`:
 
 ```yaml
-# ~/.agent-rig/config.yml
 vm:
-  cpus: 4
-  memory: "8G"
-  disk: "30G"
+  cpus: 4          # Default CPU cores for new sandboxes
+  memory: "8G"     # Default memory
+  disk: "30G"      # Default disk size
 
 git:
-  user: ""
-  email: ""
+  user: "your-username"
+  email: "your@email.com"
+```
+
+Custom presets can be added to `~/.agent-rig/presets.yml`:
+
+```yaml
+presets:
+  my-stack:
+    description: "My custom development stack"
+    packages:
+      - node-20
+      - python-312
 ```
 
 ## Development
