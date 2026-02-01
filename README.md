@@ -16,22 +16,21 @@ agent-rig (`arig`) manages sandboxed development environments using Lima VMs. Ea
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/lxohi/agent-rig.git
-cd agent-rig
-
-# Install dependencies and build
-npm install
-npm run build
-
-# Link globally
-npm link
+curl -fsSL https://raw.githubusercontent.com/lxohi/agent-rig/main/install.sh | bash
 ```
 
-**Prerequisites:**
+This will:
+1. Download the latest binary for your platform
+2. Install to `~/.arig/`
+3. Add `~/.arig/bin` to your PATH
 
-- Node.js >= 20.0.0
+After installation, restart your shell or run `source ~/.zshrc` (or `~/.bashrc`).
+
+**Prerequisites:**
+- macOS (Intel or Apple Silicon) or Linux (x64 or arm64)
 - [Lima](https://lima-vm.io/) - Install with `brew install lima`
+
+**Auto-updates:** arig checks for updates in the background and automatically updates on next launch.
 
 ## Quick Start
 
