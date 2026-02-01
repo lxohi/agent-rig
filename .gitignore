@@ -1,1 +1,6 @@
 reftemp
+node_modules/
+dist/
+*.log
+.DS_Store
+coverage/
