@@ -7,6 +7,9 @@ import { createCommand } from './commands/create.js';
 import { startCommand } from './commands/start.js';
 import { stopCommand } from './commands/stop.js';
 import { destroyCommand } from './commands/destroy.js';
+import { attachCommand } from './commands/attach.js';
+import { sshCommand } from './commands/ssh.js';
+import { execCommand } from './commands/exec.js';
 
 program
   .name('arig')
@@ -51,6 +54,21 @@ program
   .command('destroy <name>')
   .description('Delete a sandbox permanently')
   .action(destroyCommand);
+
+program
+  .command('attach <name>')
+  .description('Attach to Claude Code tmux session')
+  .action(attachCommand);
+
+program
+  .command('ssh <name>')
+  .description('SSH into sandbox as agent_dev')
+  .action(sshCommand);
+
+program
+  .command('exec <name> <cmd...>')
+  .description('Execute command in sandbox')
+  .action(execCommand);
 
 const coreCmd = program.command('core').description('Core template management');
 
