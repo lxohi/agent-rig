@@ -45,26 +45,11 @@ export async function loadConfig(configDir?: string): Promise<Config> {
   }
 }
 
-function deepMerge<T extends Record<string, unknown>>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-  for (const key of Object.keys(source) as (keyof T)[]) {
-    const sourceValue = source[key];
-    if (sourceValue !== undefined) {
-      if (
-        typeof sourceValue === 'object' &&
-        sourceValue !== null &&
-        !Array.isArray(sourceValue) &&
-        typeof result[key] === 'object' &&
-        result[key] !== null
-      ) {
-        result[key] = deepMerge(
-          result[key] as Record<string, unknown>,
-          sourceValue as Record<string, unknown>
-        ) as T[keyof T];
-      } else {
-        result[key] = sourceValue as T[keyof T];
-      }
-    }
-  }
-  return result;
+function deepMerge(target: Config, source: Partial<Config>): Config {
+  return {
+    vm: { ...target.vm, ...source.vm },
+    claude: { ...target.claude, ...source.claude },
+    limits: { ...target.limits, ...source.limits },
+    git: { ...target.git, ...source.git },
+  };
 }

@@ -1,4 +1,4 @@
-import { execa, type ExecaError } from 'execa';
+import { execa } from 'execa';
 import { join } from 'node:path';
 import { getConfigDir } from './config.js';
 
@@ -66,8 +66,8 @@ export async function limaList(): Promise<LimaVM[]> {
     const { stdout } = await execa('limactl', ['list', '--json']);
     return parseLimaList(stdout);
   } catch (error) {
-    const execaError = error as ExecaError;
-    if (execaError.code === 'ENOENT') {
+    const err = error as NodeJS.ErrnoException;
+    if (err.code === 'ENOENT') {
       throw new Error('Lima is not installed. Please install Lima first: brew install lima');
     }
     throw error;
