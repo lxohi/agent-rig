@@ -1,0 +1,29 @@
+import React from 'react';
+import { render } from 'ink';
+import { sandboxExists, deleteSandboxConfig } from '../lib/sandbox.js';
+import { limaDelete, getSandboxVMName } from '../lib/lima.js';
+import { StatusLine } from '../components/StatusLine.js';
+import { Spinner } from '../components/Spinner.js';
+
+export async function destroyCommand(name: string): Promise<void> {
+  if (!(await sandboxExists(name))) {
+    render(<StatusLine status="error" message={`Sandbox "${name}" not found`} />);
+    process.exit(1);
+  }
+
+  const { unmount } = render(
+    <Spinner message={`Destroying sandbox "${name}"...`} />
+  );
+
+  try {
+    const vmName = getSandboxVMName(name);
+    await limaDelete(vmName);
+    await deleteSandboxConfig(name);
+    unmount();
+    render(<StatusLine status="success" message={`Destroyed sandbox "${name}"`} />);
+  } catch (error) {
+    unmount();
+    render(<StatusLine status="error" message={`Failed to destroy: ${error}`} />);
+    process.exit(1);
+  }
+}

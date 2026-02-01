@@ -4,6 +4,9 @@ import { listCommand } from './commands/list.js';
 import { infoCommand } from './commands/info.js';
 import { coreBuildCommand } from './commands/core.js';
 import { createCommand } from './commands/create.js';
+import { startCommand } from './commands/start.js';
+import { stopCommand } from './commands/stop.js';
+import { destroyCommand } from './commands/destroy.js';
 
 program
   .name('arig')
@@ -33,6 +36,21 @@ program
   .option('--memory <size>', 'Memory size')
   .option('--disk <size>', 'Disk size')
   .action(createCommand);
+
+program
+  .command('start <name>')
+  .description('Start a stopped sandbox')
+  .action(startCommand);
+
+program
+  .command('stop <name>')
+  .description('Stop a running sandbox')
+  .action(stopCommand);
+
+program
+  .command('destroy <name>')
+  .description('Delete a sandbox permanently')
+  .action(destroyCommand);
 
 const coreCmd = program.command('core').description('Core template management');
 
