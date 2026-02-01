@@ -20,10 +20,8 @@ agent-rig (`arig`) manages sandboxed development environments using Lima VMs. Ea
 git clone https://github.com/lxohi/agent-rig.git
 cd agent-rig
 
-# Install dependencies
+# Install dependencies and build
 npm install
-
-# Build
 npm run build
 
 # Link globally
@@ -114,10 +112,7 @@ Built-in presets for common development stacks:
 Create custom presets:
 
 ```bash
-# Create a preset
 arig preset create my-stack "node-20,python-312,java-21"
-
-# Use it
 arig create my-project --preset my-stack --repo https://github.com/user/repo
 ```
 
@@ -135,109 +130,37 @@ arig create my-project --preset my-stack --repo https://github.com/user/repo
 
 Configuration files are stored in `~/.agent-rig/`:
 
-```
-~/.agent-rig/
-├── config.yml      # Global configuration
-├── presets.yml     # Custom presets
-├── templates/      # Template index
-└── sandboxes/      # Sandbox configurations
-```
-
-### config.yml
-
 ```yaml
+# ~/.agent-rig/config.yml
 vm:
   cpus: 4
   memory: "8G"
   disk: "30G"
-
-claude:
-  base_url: ""
-  auth_token: ""
-
-limits:
-  memory_max: "16G"
-  cpu_quota: "400%"
-  tasks_max: 1024
 
 git:
   user: ""
   email: ""
 ```
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        arig CLI                              │
-├─────────────────────────────────────────────────────────────┤
-│  Commands: create, list, start, stop, destroy, attach, ...  │
-├─────────────────────────────────────────────────────────────┤
-│                     Core Libraries                           │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐ ┌─────────┐          │
-│  │ Config  │ │ Presets │ │ Template │ │ Sandbox │          │
-│  └─────────┘ └─────────┘ └──────────┘ └─────────┘          │
-├─────────────────────────────────────────────────────────────┤
-│                    Lima Integration                          │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  limactl: create, start, stop, delete, shell, copy   │   │
-│  └──────────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────────┤
-│                      Lima VMs                                │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐            │
-│  │ Core       │  │ Template   │  │ Sandbox    │            │
-│  │ (Ubuntu)   │──│ (+ pkgs)   │──│ (+ repo)   │            │
-│  └────────────┘  └────────────┘  └────────────┘            │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Template System:**
-
-1. **Core Template** - Base Ubuntu 24.04 VM with essential tools (mise, tmux, git)
-2. **Package Templates** - Core + specific packages, cached by hash
-3. **Sandboxes** - Cloned from templates with repo and configuration
-
-This layered approach means creating a new sandbox with the same packages reuses the cached template, making sandbox creation fast.
-
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-
-# Build
-npm run build
-
-# Run tests
-npm test
-
-# Run tests once
-npm run test:run
-
-# Type check
-npm run typecheck
-
-# Lint
-npm run lint
+npm install      # Install dependencies
+npm run build    # Build
+npm test         # Run tests in watch mode
+npm run test:run # Run tests once
 ```
 
-## Tech Stack
+## Documentation
 
-- **TypeScript** - Type-safe JavaScript
-- **Commander.js** - CLI framework
-- **Ink** - React for CLI interfaces
-- **Lima** - Linux virtual machines on macOS
-- **Vitest** - Testing framework
+- [Architecture](docs/ARCHITECTURE.md) - Internal design, template system, and code structure
 
 ## Shell Completions
 
 ```bash
-# Install completions (auto-detects shell)
-arig completions install
-
-# Or output directly
-arig completions bash >> ~/.bashrc
-arig completions zsh >> ~/.zshrc
+arig completions install  # Auto-detect shell and install
+arig completions bash     # Output bash completions
+arig completions zsh      # Output zsh completions
 ```
 
 ## License
