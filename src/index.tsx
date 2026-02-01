@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { program } from 'commander';
+import { checkAndSwap } from './lib/updater.js';
+import { spawnBackgroundDownloader } from './lib/downloader.js';
 import { listCommand } from './commands/list.js';
 import { infoCommand } from './commands/info.js';
 import { coreBuildCommand } from './commands/core.js';
@@ -21,6 +23,18 @@ import {
   completionsZshCommand,
   completionsInstallCommand,
 } from './commands/completions.js';
+
+// Check for updates (non-blocking)
+checkAndSwap().then((result) => {
+  if (result.swapped) {
+    console.log(`Updated to v${result.newVersion}`);
+  }
+  if (result.checkTriggered) {
+    spawnBackgroundDownloader();
+  }
+}).catch(() => {
+  // Silently ignore update check errors
+});
 
 program
   .name('arig')
