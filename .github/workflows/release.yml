@@ -37,9 +37,9 @@ jobs:
       - name: Build binary
         run: |
           if [ "${{ matrix.target }}" = "linux-arm64" ]; then
-            bun build --compile --target=bun-linux-arm64 --external react-devtools-core --outfile=arig-${{ matrix.target }} src/index.tsx
+            bun build --compile --target=bun-linux-arm64 --outfile=arig-${{ matrix.target }} src/index.tsx
           else
-            bun build --compile --external react-devtools-core --outfile=arig-${{ matrix.target }} src/index.tsx
+            bun build --compile --outfile=arig-${{ matrix.target }} src/index.tsx
           fi
 
       - name: Generate checksum
