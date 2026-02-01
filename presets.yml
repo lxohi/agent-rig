@@ -1,0 +1,17 @@
+presets:
+  fullstack-dev:
+    description: "Full stack development with Java and Node"
+    packages:
+      - java-17
+      - node-20
+
+  python-ml:
+    description: "Python machine learning development"
+    packages:
+      - python-312
+      - uv
+
+  frontend:
+    description: "Frontend development"
+    packages:
+      - node-20

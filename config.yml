@@ -1,0 +1,19 @@
+# Agent Rig Global Configuration
+
+vm:
+  cpus: 4
+  memory: "8G"
+  disk: "30G"
+
+claude:
+  base_url: ""
+  auth_token: ""
+
+limits:
+  memory_max: "16G"
+  cpu_quota: "400%"
+  tasks_max: 1024
+
+git:
+  user: ""
+  email: ""
