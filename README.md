@@ -128,28 +128,23 @@ arig create my-project --preset my-stack --repo https://github.com/user/repo
 
 ## Configuration
 
-Global settings are stored in `~/.agent-rig/config.yml`:
+Sandbox settings are specified via `create` options:
 
-```yaml
-vm:
-  cpus: 4          # Default CPU cores for new sandboxes
-  memory: "8G"     # Default memory
-  disk: "30G"      # Default disk size
-
-git:
-  user: "your-username"
-  email: "your@email.com"
+```bash
+arig create my-project \
+  --repo https://github.com/user/repo \
+  --preset fullstack-dev \
+  --cpus 8 \
+  --memory 16G \
+  --disk 50G
 ```
 
-Custom presets can be added to `~/.agent-rig/presets.yml`:
+Custom presets are managed via CLI:
 
-```yaml
-presets:
-  my-stack:
-    description: "My custom development stack"
-    packages:
-      - node-20
-      - python-312
+```bash
+arig preset create my-stack "node-20,python-312"
+arig preset list
+arig preset delete my-stack
 ```
 
 ## Development
