@@ -1,0 +1,12 @@
+name: "java-17"
+version: "1.0.0"
+description: "OpenJDK 17 (Temurin) with Gradle and Maven"
+
+provides:
+  java: "temurin-17"
+  gradle: "8.5"
+  maven: "3.9.6"
+
+conflicts:
+  - "java-21"
+  - "java-11"

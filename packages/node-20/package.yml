@@ -1,0 +1,8 @@
+name: "node-20"
+version: "1.0.0"
+description: "Node.js 20 LTS"
+
+provides:
+  node: "20"
+
+conflicts: []
