@@ -2,6 +2,7 @@
 import { program } from 'commander';
 import { listCommand } from './commands/list.js';
 import { infoCommand } from './commands/info.js';
+import { coreBuildCommand } from './commands/core.js';
 
 program
   .name('arig')
@@ -18,5 +19,13 @@ program
   .command('info <name>')
   .description('Show detailed sandbox info')
   .action(infoCommand);
+
+const coreCmd = program.command('core').description('Core template management');
+
+coreCmd
+  .command('build')
+  .description('Build/rebuild core template')
+  .option('-f, --force', 'Force rebuild even if exists')
+  .action(coreBuildCommand);
 
 program.parse();
