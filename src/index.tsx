@@ -39,7 +39,7 @@ checkAndSwap().then((result) => {
 program
   .name('arig')
   .description('CLI tool for creating isolated development environments for coding agents')
-  .version('0.1.0');
+  .version('0.1.1');
 
 program
   .command('list')
