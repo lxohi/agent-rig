@@ -16,6 +16,11 @@ import {
   presetCreateCommand,
   presetDeleteCommand,
 } from './commands/preset.js';
+import {
+  completionsBashCommand,
+  completionsZshCommand,
+  completionsInstallCommand,
+} from './commands/completions.js';
 
 program
   .name('arig')
@@ -112,5 +117,22 @@ presetCmd
   .command('delete <name>')
   .description('Delete a custom preset')
   .action(presetDeleteCommand);
+
+const completionsCmd = program.command('completions').description('Shell completions');
+
+completionsCmd
+  .command('install')
+  .description('Install shell completions')
+  .action(completionsInstallCommand);
+
+completionsCmd
+  .command('bash')
+  .description('Output bash completions')
+  .action(completionsBashCommand);
+
+completionsCmd
+  .command('zsh')
+  .description('Output zsh completions')
+  .action(completionsZshCommand);
 
 program.parse();
