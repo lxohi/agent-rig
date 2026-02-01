@@ -11,6 +11,11 @@ import { attachCommand } from './commands/attach.js';
 import { sshCommand } from './commands/ssh.js';
 import { execCommand } from './commands/exec.js';
 import { templateListCommand, templatePruneCommand } from './commands/template.js';
+import {
+  presetListCommand,
+  presetCreateCommand,
+  presetDeleteCommand,
+} from './commands/preset.js';
 
 program
   .name('arig')
@@ -90,5 +95,22 @@ templateCmd
   .command('prune [n]')
   .description('Keep only n most recent templates (default: 5)')
   .action(templatePruneCommand);
+
+const presetCmd = program.command('preset').description('Preset management');
+
+presetCmd
+  .command('list')
+  .description('List available presets')
+  .action(presetListCommand);
+
+presetCmd
+  .command('create <name> <packages>')
+  .description('Create a custom preset')
+  .action(presetCreateCommand);
+
+presetCmd
+  .command('delete <name>')
+  .description('Delete a custom preset')
+  .action(presetDeleteCommand);
 
 program.parse();
