@@ -10,6 +10,7 @@ import { destroyCommand } from './commands/destroy.js';
 import { attachCommand } from './commands/attach.js';
 import { sshCommand } from './commands/ssh.js';
 import { execCommand } from './commands/exec.js';
+import { templateListCommand, templatePruneCommand } from './commands/template.js';
 
 program
   .name('arig')
@@ -77,5 +78,17 @@ coreCmd
   .description('Build/rebuild core template')
   .option('-f, --force', 'Force rebuild even if exists')
   .action(coreBuildCommand);
+
+const templateCmd = program.command('template').description('Template management');
+
+templateCmd
+  .command('list')
+  .description('List cached templates')
+  .action(templateListCommand);
+
+templateCmd
+  .command('prune [n]')
+  .description('Keep only n most recent templates (default: 5)')
+  .action(templatePruneCommand);
 
 program.parse();
