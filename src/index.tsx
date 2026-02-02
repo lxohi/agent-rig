@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { program } from 'commander';
 import { checkAndSwap } from './lib/updater.js';
-import { spawnBackgroundDownloader } from './lib/downloader.js';
 import { listCommand } from './commands/list.js';
 import { infoCommand } from './commands/info.js';
 import { coreBuildCommand } from './commands/core.js';
@@ -26,17 +25,15 @@ import {
 import { updateCommand } from './commands/update.js';
 import { VERSION } from './version.js';
 
-// Check for updates (non-blocking)
-checkAndSwap().then((result) => {
+// Check for updates and swap if pending (blocking)
+try {
+  const result = await checkAndSwap();
   if (result.swapped) {
     console.log(`Updated to v${result.newVersion}`);
   }
-  if (result.checkTriggered) {
-    spawnBackgroundDownloader();
-  }
-}).catch(() => {
+} catch {
   // Silently ignore update check errors
-});
+}
 
 // Custom help text for main command
 const MAIN_HELP = `Usage: arig [options] [command]
