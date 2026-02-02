@@ -6,6 +6,7 @@ import {
   limaStart,
   limaStop,
   limaDelete,
+  limaList,
   getTemplateVMName,
   buildLimaConfig,
 } from '../lib/lima.js';
@@ -33,11 +34,8 @@ export async function coreBuildCommand(options: { force?: boolean }): Promise<vo
   // Check if core template already exists
   if (!options.force) {
     try {
-      // Check if VM exists by trying to get its status
-      const { execa } = await import('execa');
-      const { stdout } = await execa('limactl', ['list', '--json']);
-      const vms = JSON.parse(stdout);
-      if (vms.some((vm: { name: string }) => vm.name === vmName)) {
+      const vms = await limaList();
+      if (vms.some((vm) => vm.name === vmName)) {
         render(
           <StatusLine
             status="info"

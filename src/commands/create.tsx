@@ -14,7 +14,9 @@ import {
 import { saveSandboxConfig, sandboxExists } from '../lib/sandbox.js';
 import {
   limaStart,
+  limaStop,
   limaExec,
+  limaClone,
   getSandboxVMName,
   getTemplateVMName,
   limaList,
@@ -41,6 +43,17 @@ async function detectGitRepo(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+// Convert package name from preset format (node-20) to mise format (node@20)
+function toMisePackage(pkg: string): string {
+  // Handle formats like: node-20, python-312, java-17
+  const match = pkg.match(/^([a-z]+)-(\d+)$/);
+  if (match) {
+    return `${match[1]}@${match[2]}`;
+  }
+  // Return as-is for packages like 'uv' or already formatted 'node@20'
+  return pkg;
 }
 
 function CreateUI({ tasks, error }: { tasks: Task[]; error?: string }) {
@@ -156,22 +169,23 @@ export async function createCommand(
         // Create new template from core
         templateVMName = getTemplateVMName(packageHash);
         // Clone core and install packages
-        await execa('limactl', ['copy', coreVMName, templateVMName]);
+        await limaClone(coreVMName, templateVMName);
         await limaStart(templateVMName);
 
         // Install packages via mise
         for (const pkg of packages) {
+          const misePackage = toMisePackage(pkg);
           await limaExec(templateVMName, [
             'sudo',
             '-u',
             'agent_dev',
             'bash',
             '-c',
-            `source ~/.bashrc && ~/.local/bin/mise use --global ${pkg}`,
+            `source ~/.bashrc && ~/.local/bin/mise use --global ${misePackage}`,
           ]);
         }
 
-        await execa('limactl', ['stop', templateVMName]);
+        await limaStop(templateVMName);
 
         // Save to index
         templateIndex = addTemplate(templateIndex, {
@@ -190,7 +204,7 @@ export async function createCommand(
 
     // Step 3: Create sandbox VM from template
     const sandboxVMName = getSandboxVMName(name);
-    await execa('limactl', ['copy', templateVMName, sandboxVMName]);
+    await limaClone(templateVMName, sandboxVMName);
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 

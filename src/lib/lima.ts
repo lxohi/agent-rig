@@ -21,7 +21,16 @@ export interface LimaConfig {
 
 export function parseLimaList(output: string): LimaVM[] {
   try {
-    return JSON.parse(output) as LimaVM[];
+    const parsed = JSON.parse(output);
+    // limactl list --json returns a single object when there's one VM,
+    // or an array when there are multiple VMs, or empty string when none
+    if (Array.isArray(parsed)) {
+      return parsed as LimaVM[];
+    }
+    if (parsed && typeof parsed === 'object') {
+      return [parsed as LimaVM];
+    }
+    return [];
   } catch {
     return [];
   }
@@ -96,11 +105,7 @@ export async function limaExec(name: string, command: string[]): Promise<string>
 }
 
 export async function limaClone(sourceName: string, targetName: string): Promise<void> {
-  // Lima doesn't have native clone, so we copy the disk image
-  const configDir = getConfigDir();
-  const limaDir = join(configDir, 'lima');
-  // This is a simplified version - actual implementation needs disk copy
-  await execa('limactl', ['copy', sourceName, targetName]);
+  await execa('limactl', ['clone', sourceName, targetName]);
 }
 
 export function getSandboxVMName(sandboxName: string): string {
