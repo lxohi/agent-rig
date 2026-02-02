@@ -1,5 +1,5 @@
-import React from 'react';
-import { render, Box } from 'ink';
+import React, { useState } from 'react';
+import { render, Box, Text, useInput, useApp } from 'ink';
 import { execa } from 'execa';
 import { loadConfig } from '../lib/config.js';
 import { loadPresets, getPreset } from '../lib/presets.js';
@@ -72,6 +72,85 @@ function CreateUI({ tasks, error }: { tasks: Task[]; error?: string }) {
   );
 }
 
+interface ConfirmParams {
+  name: string;
+  repo: string;
+  packages: string[];
+  preset?: string;
+  cpus: number;
+  memory: string;
+  disk: string;
+}
+
+function ConfirmUI({
+  params,
+  onConfirm,
+  onCancel,
+}: {
+  params: ConfirmParams;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { exit } = useApp();
+
+  useInput((input, key) => {
+    if (input === 'y' || input === 'Y' || key.return) {
+      onConfirm();
+    } else if (input === 'n' || input === 'N' || key.escape) {
+      onCancel();
+      exit();
+    }
+  });
+
+  return (
+    <Box flexDirection="column" gap={1}>
+      <Text bold>Create sandbox with the following configuration:</Text>
+      <Box flexDirection="column" paddingLeft={2}>
+        <Text>
+          <Text dimColor>Name:</Text> {params.name}
+        </Text>
+        <Text>
+          <Text dimColor>Repository:</Text> {params.repo}
+        </Text>
+        <Text>
+          <Text dimColor>Packages:</Text>{' '}
+          {params.packages.length > 0 ? params.packages.join(', ') : '(none)'}
+        </Text>
+        {params.preset && (
+          <Text>
+            <Text dimColor>Preset:</Text> {params.preset}
+          </Text>
+        )}
+        <Text>
+          <Text dimColor>VM:</Text> {params.cpus} CPUs, {params.memory} memory, {params.disk} disk
+        </Text>
+      </Box>
+      <Text>
+        <Text dimColor>Press</Text> <Text color="green">Y</Text> <Text dimColor>to continue,</Text>{' '}
+        <Text color="red">N</Text> <Text dimColor>to cancel</Text>
+      </Text>
+    </Box>
+  );
+}
+
+async function waitForConfirmation(params: ConfirmParams): Promise<boolean> {
+  return new Promise((resolve) => {
+    const { unmount } = render(
+      <ConfirmUI
+        params={params}
+        onConfirm={() => {
+          unmount();
+          resolve(true);
+        }}
+        onCancel={() => {
+          unmount();
+          resolve(false);
+        }}
+      />
+    );
+  });
+}
+
 export async function createCommand(
   name: string,
   options: CreateOptions
@@ -112,6 +191,27 @@ export async function createCommand(
       />
     );
     process.exit(1);
+  }
+
+  // Resolve VM configuration
+  const vmCpus = options.cpus ? parseInt(options.cpus) : config.vm.cpus;
+  const vmMemory = options.memory || config.vm.memory;
+  const vmDisk = options.disk || config.vm.disk;
+
+  // Confirm parameters before proceeding
+  const confirmed = await waitForConfirmation({
+    name,
+    repo,
+    packages,
+    preset: options.preset,
+    cpus: vmCpus,
+    memory: vmMemory,
+    disk: vmDisk,
+  });
+
+  if (!confirmed) {
+    render(<StatusLine status="info" message="Cancelled" />);
+    process.exit(0);
   }
 
   const tasks: Task[] = [
@@ -271,9 +371,9 @@ export async function createCommand(
       packages,
       preset: options.preset,
       vm: {
-        cpus: options.cpus ? parseInt(options.cpus) : config.vm.cpus,
-        memory: options.memory || config.vm.memory,
-        disk: options.disk || config.vm.disk,
+        cpus: vmCpus,
+        memory: vmMemory,
+        disk: vmDisk,
       },
       created: new Date().toISOString(),
     };
