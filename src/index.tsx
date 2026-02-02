@@ -38,26 +38,72 @@ checkAndSwap().then((result) => {
   // Silently ignore update check errors
 });
 
+// Custom help text for main command
+const MAIN_HELP = `Usage: arig [options] [command]
+
+CLI tool for creating isolated development environments for coding agents
+
+Options:
+  -V, --version     Output the version number
+  -h, --help        Display help for command
+
+Sandbox Lifecycle:
+  create <name>     Create a new sandbox from template
+  list, ls          List all sandboxes with status
+  start <name>      Start a stopped sandbox
+  stop <name>       Stop a running sandbox
+  destroy <name>    Delete a sandbox permanently
+
+Sandbox Access:
+  attach <name>     Attach to Claude Code tmux session
+  ssh <name>        SSH into sandbox as agent_dev
+  exec <name> ...   Execute command in sandbox
+  info <name>       Show detailed sandbox info
+
+Management:
+  preset            Manage package presets
+  template          Manage cached templates
+  core              Manage core template
+
+Other:
+  update            Check for updates
+  completions       Shell completions
+
+Run 'arig <command> --help' for more information on a command.
+
+Examples:
+  $ arig create my-project --preset fullstack-dev
+  $ arig attach my-project
+  $ arig list
+`;
+
 program
   .name('arig')
   .description('CLI tool for creating isolated development environments for coding agents')
-  .version(VERSION);
+  .version(VERSION)
+  .helpOption('-h, --help', 'Display help for command')
+  .addHelpCommand(false)
+  .action(() => {
+    // Show custom help when no command is provided
+    console.log(MAIN_HELP);
+  });
 
-program
-  .command('update')
-  .description('Check for updates and download if available')
-  .action(updateCommand);
+// Override help for main program only
+program.on('--help', () => {});
+program.configureOutput({
+  writeOut: (str) => {
+    // Check if this is the main help output
+    if (str.includes('Commands:') && str.includes('create [options]')) {
+      process.stdout.write(MAIN_HELP);
+    } else {
+      process.stdout.write(str);
+    }
+  },
+});
 
-program
-  .command('list')
-  .alias('ls')
-  .description('List all sandboxes with status')
-  .action(listCommand);
-
-program
-  .command('info <name>')
-  .description('Show detailed sandbox info')
-  .action(infoCommand);
+// ============================================
+// Sandbox Lifecycle Commands (most common)
+// ============================================
 
 program
   .command('create <name>')
@@ -78,6 +124,12 @@ program
   .action(createCommand);
 
 program
+  .command('list')
+  .alias('ls')
+  .description('List all sandboxes with status')
+  .action(listCommand);
+
+program
   .command('start <name>')
   .description('Start a stopped sandbox')
   .action(startCommand);
@@ -91,6 +143,10 @@ program
   .command('destroy <name>')
   .description('Delete a sandbox permanently')
   .action(destroyCommand);
+
+// ============================================
+// Sandbox Access Commands
+// ============================================
 
 program
   .command('attach <name>')
@@ -107,25 +163,14 @@ program
   .description('Execute command in sandbox')
   .action(execCommand);
 
-const coreCmd = program.command('core').description('Core template management');
+program
+  .command('info <name>')
+  .description('Show detailed sandbox info')
+  .action(infoCommand);
 
-coreCmd
-  .command('build')
-  .description('Build/rebuild core template')
-  .option('-f, --force', 'Force rebuild even if exists')
-  .action(coreBuildCommand);
-
-const templateCmd = program.command('template').description('Template management');
-
-templateCmd
-  .command('list')
-  .description('List cached templates')
-  .action(templateListCommand);
-
-templateCmd
-  .command('prune [n]')
-  .description('Keep only n most recent templates (default: 5)')
-  .action(templatePruneCommand);
+// ============================================
+// Management Commands
+// ============================================
 
 const presetCmd = program.command('preset').description('Preset management');
 
@@ -143,6 +188,35 @@ presetCmd
   .command('delete <name>')
   .description('Delete a custom preset')
   .action(presetDeleteCommand);
+
+const templateCmd = program.command('template').description('Template cache management');
+
+templateCmd
+  .command('list')
+  .description('List cached templates')
+  .action(templateListCommand);
+
+templateCmd
+  .command('prune [n]')
+  .description('Keep only n most recent templates (default: 5)')
+  .action(templatePruneCommand);
+
+const coreCmd = program.command('core').description('Core template management');
+
+coreCmd
+  .command('build')
+  .description('Build/rebuild core template')
+  .option('-f, --force', 'Force rebuild even if exists')
+  .action(coreBuildCommand);
+
+// ============================================
+// Other Commands
+// ============================================
+
+program
+  .command('update')
+  .description('Check for updates and download if available')
+  .action(updateCommand);
 
 const completionsCmd = program.command('completions').description('Shell completions');
 

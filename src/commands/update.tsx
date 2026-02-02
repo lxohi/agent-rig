@@ -9,10 +9,7 @@ import { VERSION } from '../version.js';
 
 function CheckingUI() {
   return (
-    <Box>
-      <Spinner />
-      <Text> Checking for updates...</Text>
-    </Box>
+    <Spinner message="Checking for updates..." />
   );
 }
 
