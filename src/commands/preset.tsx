@@ -11,17 +11,29 @@ import type { PresetsFile } from '../lib/types.js';
 export async function presetListCommand(): Promise<void> {
   const presets = await loadPresets();
 
+  const entries = Object.entries(presets.presets);
+
+  // Calculate dynamic column widths
+  const nameWidth = Math.max(
+    4, // "NAME"
+    ...entries.map(([name]) => name.length)
+  ) + 2;
+  const descWidth = Math.max(
+    11, // "DESCRIPTION"
+    ...entries.map(([, preset]) => preset.description.length)
+  ) + 2;
+
   render(
     <Box flexDirection="column">
       <Box>
-        <Box width={20}><Text bold>NAME</Text></Box>
-        <Box width={40}><Text bold>DESCRIPTION</Text></Box>
+        <Box width={nameWidth}><Text bold>NAME</Text></Box>
+        <Box width={descWidth}><Text bold>DESCRIPTION</Text></Box>
         <Box><Text bold>PACKAGES</Text></Box>
       </Box>
-      {Object.entries(presets.presets).map(([name, preset]) => (
+      {entries.map(([name, preset]) => (
         <Box key={name}>
-          <Box width={20}><Text>{name}</Text></Box>
-          <Box width={40}><Text dimColor>{preset.description}</Text></Box>
+          <Box width={nameWidth}><Text>{name}</Text></Box>
+          <Box width={descWidth}><Text dimColor>{preset.description}</Text></Box>
           <Box><Text dimColor>{preset.packages.join(', ')}</Text></Box>
         </Box>
       ))}

@@ -12,19 +12,33 @@ export async function templateListCommand(): Promise<void> {
     return;
   }
 
+  // Calculate dynamic column widths
+  const nameWidth = Math.max(
+    4, // "NAME"
+    ...index.templates.map((t) => t.name.length)
+  ) + 2;
+  const hashWidth = Math.max(
+    4, // "HASH"
+    ...index.templates.map((t) => t.hash.length)
+  ) + 2;
+  const usesWidth = Math.max(
+    4, // "USES"
+    ...index.templates.map((t) => String(t.usageCount).length)
+  ) + 2;
+
   render(
     <Box flexDirection="column">
       <Box>
-        <Box width={20}><Text bold>NAME</Text></Box>
-        <Box width={14}><Text bold>HASH</Text></Box>
-        <Box width={8}><Text bold>USES</Text></Box>
+        <Box width={nameWidth}><Text bold>NAME</Text></Box>
+        <Box width={hashWidth}><Text bold>HASH</Text></Box>
+        <Box width={usesWidth}><Text bold>USES</Text></Box>
         <Box><Text bold>PACKAGES</Text></Box>
       </Box>
       {index.templates.map((t) => (
         <Box key={t.hash}>
-          <Box width={20}><Text>{t.name}</Text></Box>
-          <Box width={14}><Text dimColor>{t.hash}</Text></Box>
-          <Box width={8}><Text>{t.usageCount}</Text></Box>
+          <Box width={nameWidth}><Text>{t.name}</Text></Box>
+          <Box width={hashWidth}><Text dimColor>{t.hash}</Text></Box>
+          <Box width={usesWidth}><Text>{t.usageCount}</Text></Box>
           <Box><Text dimColor>{t.packages.join(', ')}</Text></Box>
         </Box>
       ))}

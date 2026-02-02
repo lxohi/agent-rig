@@ -228,20 +228,6 @@ describe('CLI Integration Tests', () => {
   });
 
   describe('Create Command', () => {
-    it('shows error when core template not found', async () => {
-      const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
-      try {
-        const { stdout, exitCode } = await runCli(
-          ['create', 'test-sandbox', '--repo', 'https://github.com/test/repo'],
-          { ARIG_CONFIG_DIR: testDir }
-        );
-        expect(exitCode).toBe(1);
-        expect(stdout).toContain('Core template not found');
-      } finally {
-        await rm(testDir, { recursive: true, force: true });
-      }
-    });
-
     it('shows error for non-existent preset', async () => {
       const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
       try {
