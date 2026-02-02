@@ -58,8 +58,12 @@ rm -f package.json.bak
 sed -i.bak "s/.version('$CURRENT_VERSION')/.version('$NEW_VERSION')/" src/index.tsx
 rm -f src/index.tsx.bak
 
+# Update version in src/version.ts
+sed -i.bak "s/VERSION = '$CURRENT_VERSION'/VERSION = '$NEW_VERSION'/" src/version.ts
+rm -f src/version.ts.bak
+
 # Commit version bump
-git add package.json src/index.tsx
+git add package.json src/index.tsx src/version.ts
 git commit -m "chore: bump version to $NEW_VERSION"
 
 # Create and push tag

@@ -23,6 +23,8 @@ import {
   completionsZshCommand,
   completionsInstallCommand,
 } from './commands/completions.js';
+import { updateCommand } from './commands/update.js';
+import { VERSION } from './version.js';
 
 // Check for updates (non-blocking)
 checkAndSwap().then((result) => {
@@ -39,7 +41,12 @@ checkAndSwap().then((result) => {
 program
   .name('arig')
   .description('CLI tool for creating isolated development environments for coding agents')
-  .version('0.3.2');
+  .version(VERSION);
+
+program
+  .command('update')
+  .description('Check for updates and download if available')
+  .action(updateCommand);
 
 program
   .command('list')
