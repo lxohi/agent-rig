@@ -11,10 +11,17 @@ describe('TaskList', () => {
     expect(lastFrame()).toContain('Install packages');
   });
 
-  it('renders pending tasks with spinner', () => {
+  it('renders pending tasks with circle', () => {
     const tasks: Task[] = [{ label: 'Clone repo', status: 'pending' }];
     const { lastFrame } = render(<TaskList tasks={tasks} />);
+    expect(lastFrame()).toContain('○');
     expect(lastFrame()).toContain('Clone repo');
+  });
+
+  it('renders running tasks with spinner', () => {
+    const tasks: Task[] = [{ label: 'Building', status: 'running' }];
+    const { lastFrame } = render(<TaskList tasks={tasks} />);
+    expect(lastFrame()).toContain('Building');
   });
 
   it('renders failed tasks with X', () => {

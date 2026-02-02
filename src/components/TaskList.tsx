@@ -16,7 +16,7 @@ export function TaskList({ tasks }: TaskListProps) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
-    const hasRunning = tasks.some((t) => t.status === 'running' || t.status === 'pending');
+    const hasRunning = tasks.some((t) => t.status === 'running');
     if (!hasRunning) return;
 
     const timer = setInterval(() => {
@@ -32,10 +32,13 @@ export function TaskList({ tasks }: TaskListProps) {
           <Text>
             {task.status === 'completed' && <Text color="green">✓ </Text>}
             {task.status === 'failed' && <Text color="red">✗ </Text>}
-            {(task.status === 'running' || task.status === 'pending') && (
+            {task.status === 'running' && (
               <Text color="yellow">{spinnerFrames[frame]} </Text>
             )}
-            <Text dimColor={task.status === 'completed'}>{task.label}</Text>
+            {task.status === 'pending' && <Text dimColor>○ </Text>}
+            <Text dimColor={task.status === 'pending' || task.status === 'completed'}>
+              {task.label}
+            </Text>
           </Text>
         </Box>
       ))}
