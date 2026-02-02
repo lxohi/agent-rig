@@ -100,10 +100,11 @@ interface ConfirmParams {
   packages: string[];
   preset?: string;
   gitUser?: string;
+  gitToken?: boolean; // Just indicate if token is set, not the actual value
   gitName?: string;
   gitEmail?: string;
   baseUrl?: string;
-  authToken?: string;
+  authToken?: boolean; // Just indicate if token is set, not the actual value
   cpus: number;
   memory: string;
   disk: string;
@@ -129,7 +130,6 @@ function ConfirmUI({
     }
   });
 
-  const hasGitConfig = params.gitUser || params.gitName || params.gitEmail;
   const hasClaudeConfig = params.baseUrl || params.authToken;
 
   return (
@@ -140,7 +140,6 @@ function ConfirmUI({
       <Box flexDirection="column">
         <Text bold color="cyan">  Sandbox</Text>
         <Text>    Name:      {params.name}</Text>
-        <Text>    Repo:      {params.repo}</Text>
         {params.preset ? (
           <Text>    Preset:    {params.preset}</Text>
         ) : (
@@ -149,21 +148,21 @@ function ConfirmUI({
       </Box>
 
       {/* Git Config */}
-      {hasGitConfig && (
-        <Box flexDirection="column">
-          <Text bold color="cyan">  Git</Text>
-          {params.gitUser && <Text>    Auth:      {params.gitUser}</Text>}
-          {params.gitName && <Text>    Name:      {params.gitName}</Text>}
-          {params.gitEmail && <Text>    Email:     {params.gitEmail}</Text>}
-        </Box>
-      )}
+      <Box flexDirection="column">
+        <Text bold color="cyan">  Git</Text>
+        <Text>    Repo:      {params.repo}</Text>
+        {params.gitUser && <Text>    Username:  {params.gitUser}</Text>}
+        {params.gitToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text></Text>}
+        {params.gitName && <Text>    Author:    {params.gitName}</Text>}
+        {params.gitEmail && <Text>    Email:     {params.gitEmail}</Text>}
+      </Box>
 
       {/* Claude Config */}
       {hasClaudeConfig && (
         <Box flexDirection="column">
           <Text bold color="cyan">  Claude</Text>
           {params.baseUrl && <Text>    Base URL:  {params.baseUrl}</Text>}
-          {params.authToken && <Text>    Token:     ********</Text>}
+          {params.authToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text></Text>}
         </Box>
       )}
 
@@ -264,10 +263,11 @@ export async function createCommand(
     packages,
     preset: options.preset,
     gitUser: options.gitUser,
+    gitToken: !!options.gitToken,
     gitName,
     gitEmail,
     baseUrl,
-    authToken,
+    authToken: !!authToken,
     cpus: vmCpus,
     memory: vmMemory,
     disk: vmDisk,
