@@ -14,23 +14,34 @@ function ListOutput({ sandboxes }: { sandboxes: SandboxInfo[] }) {
     return <Text dimColor>No sandboxes found. Create one with: arig create &lt;name&gt;</Text>;
   }
 
+  // Calculate dynamic column widths
+  const nameWidth = Math.max(
+    4, // "NAME"
+    ...sandboxes.map((sb) => sb.config.name.length)
+  ) + 2;
+  const statusWidth = 12;
+  const repoWidth = Math.max(
+    4, // "REPO"
+    ...sandboxes.map((sb) => sb.config.repo.length)
+  ) + 2;
+
   return (
     <Box flexDirection="column">
       <Box>
-        <Box width={16}><Text bold>NAME</Text></Box>
-        <Box width={12}><Text bold>STATUS</Text></Box>
-        <Box width={40}><Text bold>REPO</Text></Box>
+        <Box width={nameWidth}><Text bold>NAME</Text></Box>
+        <Box width={statusWidth}><Text bold>STATUS</Text></Box>
+        <Box width={repoWidth}><Text bold>REPO</Text></Box>
         <Box><Text bold>PACKAGES</Text></Box>
       </Box>
       {sandboxes.map((sb) => (
         <Box key={sb.config.name}>
-          <Box width={16}><Text>{sb.config.name}</Text></Box>
-          <Box width={12}>
+          <Box width={nameWidth}><Text>{sb.config.name}</Text></Box>
+          <Box width={statusWidth}>
             <Text color={sb.status === 'running' ? 'green' : 'red'}>
               {sb.status}
             </Text>
           </Box>
-          <Box width={40}><Text dimColor>{sb.config.repo}</Text></Box>
+          <Box width={repoWidth}><Text dimColor>{sb.config.repo}</Text></Box>
           <Box><Text dimColor>{sb.config.packages.join(', ')}</Text></Box>
         </Box>
       ))}
