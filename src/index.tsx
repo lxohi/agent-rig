@@ -62,8 +62,7 @@ Sandbox Access:
 
 Management:
   preset            Manage package presets
-  template          Manage cached templates
-  core              Manage core template
+  template          Manage template cache
 
 Other:
   update            Check for updates
@@ -201,11 +200,9 @@ templateCmd
   .description('Keep only n most recent templates (default: 5)')
   .action(templatePruneCommand);
 
-const coreCmd = program.command('core').description('Core template management');
-
-coreCmd
+templateCmd
   .command('build')
-  .description('Build/rebuild core template')
+  .description('Rebuild core template')
   .option('-f, --force', 'Force rebuild even if exists')
   .action(coreBuildCommand);
 

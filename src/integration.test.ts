@@ -183,12 +183,13 @@ describe('CLI Integration Tests', () => {
     });
   });
 
-  describe('Core Command', () => {
-    it('shows help for core subcommand', async () => {
-      const { stdout, exitCode } = await runCli(['core', '--help']);
+  describe('Template Command', () => {
+    it('shows help for template subcommand', async () => {
+      const { stdout, exitCode } = await runCli(['template', '--help']);
       expect(exitCode).toBe(0);
       expect(stdout).toContain('build');
-      expect(stdout).toContain('Core template management');
+      expect(stdout).toContain('list');
+      expect(stdout).toContain('prune');
     });
   });
 
