@@ -1,2 +1,2 @@
 // This file is auto-updated by scripts/release.sh
-export const VERSION = '0.3.2';
+export const VERSION = '0.4.0';
