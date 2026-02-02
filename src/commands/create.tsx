@@ -17,10 +17,17 @@ import {
   limaStop,
   limaExec,
   limaClone,
+  limaCreate,
   getSandboxVMName,
   getTemplateVMName,
   limaList,
+  buildLimaConfig,
 } from '../lib/lima.js';
+import { PROVISION_SCRIPT } from '../lib/provision-script.js';
+import { stringify as stringifyYaml } from 'yaml';
+import { writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { TaskList, type Task } from '../components/TaskList.js';
 import { StatusLine } from '../components/StatusLine.js';
 import type { SandboxConfig } from '../lib/types.js';
@@ -108,8 +115,8 @@ export async function createCommand(
   }
 
   const tasks: Task[] = [
-    { label: 'Checking core template', status: 'pending' },
-    { label: 'Preparing template', status: 'pending' },
+    { label: 'Preparing core template', status: 'pending' },
+    { label: 'Preparing package template', status: 'pending' },
     { label: 'Creating sandbox VM', status: 'pending' },
     { label: 'Configuring sandbox', status: 'pending' },
     { label: 'Cloning repository', status: 'pending' },
@@ -131,22 +138,29 @@ export async function createCommand(
   const { rerender, unmount } = render(<CreateUI tasks={tasks} />);
 
   try {
-    // Step 1: Check core template
+    // Step 1: Prepare core template (auto-build if missing)
     updateTask('running');
     rerender(<CreateUI tasks={tasks} />);
 
     const vms = await limaList();
     const coreVMName = getTemplateVMName('');
     if (!vms.some((vm) => vm.name === coreVMName)) {
-      updateTask('failed');
-      rerender(
-        <CreateUI
-          tasks={tasks}
-          error="Core template not found. Run: arig core build"
-        />
-      );
-      unmount();
-      process.exit(1);
+      // Auto-build core template
+      const limaConfig = buildLimaConfig({
+        name: coreVMName,
+        cpus: config.vm.cpus,
+        memory: config.vm.memory,
+        disk: config.vm.disk,
+        provisionScript: PROVISION_SCRIPT,
+      });
+
+      // Write lima config to temp file
+      const configPath = join(tmpdir(), `${coreVMName}.yaml`);
+      await writeFile(configPath, stringifyYaml(limaConfig));
+
+      await limaCreate(coreVMName, configPath);
+      await limaStart(coreVMName);
+      await limaStop(coreVMName);
     }
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
