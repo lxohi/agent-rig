@@ -5,8 +5,8 @@ export interface VMConfig {
 }
 
 export interface ClaudeConfig {
-  base_url: string;
-  auth_token: string;
+  baseUrl?: string;
+  authToken?: string;
 }
 
 export interface LimitsConfig {
@@ -16,8 +16,8 @@ export interface LimitsConfig {
 }
 
 export interface GitConfig {
-  user: string;
-  email: string;
+  user?: string;
+  email?: string;
 }
 
 export interface Config {
@@ -34,6 +34,13 @@ export interface SandboxConfig {
   packages: string[];
   preset?: string;
   vm: VMConfig;
+  git?: {
+    user?: string;
+    token?: string;
+    name?: string;
+    email?: string;
+  };
+  claude?: ClaudeConfig;
   created: string;
 }
 

@@ -36,8 +36,13 @@ interface CreateOptions {
   repo?: string;
   gitUser?: string;
   gitToken?: string;
+  gitName?: string;
+  gitEmail?: string;
+  baseUrl?: string;
+  authToken?: string;
   preset?: string;
   packages?: string;
+  savePreset?: string;
   cpus?: string;
   memory?: string;
   disk?: string;
@@ -50,6 +55,23 @@ async function detectGitRepo(): Promise<string | undefined> {
   } catch {
     return undefined;
   }
+}
+
+async function detectGitConfig(): Promise<{ name?: string; email?: string }> {
+  const result: { name?: string; email?: string } = {};
+  try {
+    const { stdout: name } = await execa('git', ['config', 'user.name']);
+    result.name = name.trim();
+  } catch {
+    // Not configured
+  }
+  try {
+    const { stdout: email } = await execa('git', ['config', 'user.email']);
+    result.email = email.trim();
+  } catch {
+    // Not configured
+  }
+  return result;
 }
 
 // Convert package name from preset format (node-20) to mise format (node@20)
@@ -77,6 +99,9 @@ interface ConfirmParams {
   repo: string;
   packages: string[];
   preset?: string;
+  gitName?: string;
+  gitEmail?: string;
+  baseUrl?: string;
   cpus: number;
   memory: string;
   disk: string;
@@ -119,6 +144,16 @@ function ConfirmUI({
         {params.preset && (
           <Text>
             <Text dimColor>Preset:</Text> {params.preset}
+          </Text>
+        )}
+        {(params.gitName || params.gitEmail) && (
+          <Text>
+            <Text dimColor>Git Author:</Text> {params.gitName || ''} {params.gitEmail ? `<${params.gitEmail}>` : ''}
+          </Text>
+        )}
+        {params.baseUrl && (
+          <Text>
+            <Text dimColor>API Base URL:</Text> {params.baseUrl}
           </Text>
         )}
         <Text>
@@ -193,6 +228,15 @@ export async function createCommand(
     process.exit(1);
   }
 
+  // Auto-detect git config
+  const detectedGit = await detectGitConfig();
+  const gitName = options.gitName || detectedGit.name;
+  const gitEmail = options.gitEmail || detectedGit.email;
+
+  // Auto-detect Claude config from environment
+  const baseUrl = options.baseUrl || process.env.ANTHROPIC_BASE_URL;
+  const authToken = options.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
+
   // Resolve VM configuration
   const vmCpus = options.cpus ? parseInt(options.cpus) : config.vm.cpus;
   const vmMemory = options.memory || config.vm.memory;
@@ -204,6 +248,9 @@ export async function createCommand(
     repo,
     packages,
     preset: options.preset,
+    gitName,
+    gitEmail,
+    baseUrl,
     cpus: vmCpus,
     memory: vmMemory,
     disk: vmDisk,
@@ -325,8 +372,38 @@ export async function createCommand(
     // Step 4: Configure sandbox
     await limaStart(sandboxVMName);
 
-    // Set environment variables
+    // Configure git credentials (askpass script)
     if (options.gitUser && options.gitToken) {
+      await limaExec(sandboxVMName, [
+        'sudo',
+        'bash',
+        '-c',
+        `cat > /home/agent_dev/bin/git-askpass.sh << 'ASKPASS'
+#!/bin/bash
+case "$1" in
+    *Username*) echo "${options.gitUser}" ;;
+    *Password*) echo "${options.gitToken}" ;;
+esac
+ASKPASS
+chmod 755 /home/agent_dev/bin/git-askpass.sh
+chown agent_dev:agent_dev /home/agent_dev/bin/git-askpass.sh`,
+      ]);
+
+      // Configure git environment
+      await limaExec(sandboxVMName, [
+        'sudo',
+        'bash',
+        '-c',
+        `cat > /home/agent_dev/.bashrc.d/git.sh << 'GITENV'
+export GIT_ASKPASS=$HOME/bin/git-askpass.sh
+export GIT_TERMINAL_PROMPT=0
+GITENV
+chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/git.sh`,
+      ]);
+    }
+
+    // Configure git author
+    if (gitName) {
       await limaExec(sandboxVMName, [
         'sudo',
         '-u',
@@ -334,21 +411,55 @@ export async function createCommand(
         'git',
         'config',
         '--global',
-        'credential.helper',
-        'store',
+        'user.name',
+        gitName,
+      ]);
+    }
+    if (gitEmail) {
+      await limaExec(sandboxVMName, [
+        'sudo',
+        '-u',
+        'agent_dev',
+        'git',
+        'config',
+        '--global',
+        'user.email',
+        gitEmail,
+      ]);
+    }
+
+    // Configure Claude environment
+    if (baseUrl || authToken) {
+      const claudeEnv = [
+        'export ANTHROPIC_API_KEY=""',
+        baseUrl ? `export ANTHROPIC_BASE_URL="${baseUrl}"` : '',
+        authToken ? `export ANTHROPIC_AUTH_TOKEN="${authToken}"` : '',
+      ].filter(Boolean).join('\n');
+
+      await limaExec(sandboxVMName, [
+        'sudo',
+        'bash',
+        '-c',
+        `cat > /home/agent_dev/.bashrc.d/claude.sh << 'CLAUDEENV'
+${claudeEnv}
+CLAUDEENV
+chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/claude.sh`,
       ]);
     }
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
     // Step 5: Clone repository
+    const cloneEnv = options.gitUser && options.gitToken
+      ? 'export GIT_ASKPASS=$HOME/bin/git-askpass.sh; export GIT_TERMINAL_PROMPT=0; '
+      : '';
     await limaExec(sandboxVMName, [
       'sudo',
       '-u',
       'agent_dev',
       'bash',
       '-c',
-      `cd ~/workspace && git clone ${repo} .`,
+      `${cloneEnv}cd ~/workspace && git clone ${repo} .`,
     ]);
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
@@ -363,6 +474,12 @@ export async function createCommand(
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
+    // Save as new preset if requested
+    if (options.savePreset && packages.length > 0) {
+      const { presetCreateCommand } = await import('./preset.js');
+      await presetCreateCommand(options.savePreset, packages.join(','));
+    }
+
     // Save sandbox config
     const sandboxConfig: SandboxConfig = {
       name,
@@ -374,6 +491,16 @@ export async function createCommand(
         cpus: vmCpus,
         memory: vmMemory,
         disk: vmDisk,
+      },
+      git: {
+        user: options.gitUser,
+        token: options.gitToken ? '***' : undefined, // Don't store actual token
+        name: gitName,
+        email: gitEmail,
+      },
+      claude: {
+        baseUrl,
+        authToken: authToken ? '***' : undefined, // Don't store actual token
       },
       created: new Date().toISOString(),
     };
