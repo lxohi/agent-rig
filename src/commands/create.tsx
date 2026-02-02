@@ -176,7 +176,7 @@ function ConfirmUI({
         <Text bold color="cyan">  VM Resources</Text>
         <Text>    CPUs:      {params.cpus}</Text>
         <Text>    Memory:    {params.memory}</Text>
-        <Text>    Disk:      {params.disk}</Text>
+        <Text>    Disk:      {params.disk} <Text dimColor>(max, grows as needed)</Text></Text>
       </Box>
 
       <Text>
