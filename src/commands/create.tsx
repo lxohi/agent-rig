@@ -97,17 +97,26 @@ function CreateUI({ tasks, error }: { tasks: Task[]; error?: string }) {
 interface ConfirmParams {
   name: string;
   repo: string;
+  repoDetected?: boolean;
   packages: string[];
   preset?: string;
   gitUser?: string;
-  gitToken?: boolean; // Just indicate if token is set, not the actual value
+  gitToken?: boolean;
   gitName?: string;
+  gitNameDetected?: boolean;
   gitEmail?: string;
+  gitEmailDetected?: boolean;
   baseUrl?: string;
-  authToken?: boolean; // Just indicate if token is set, not the actual value
+  baseUrlDetected?: boolean;
+  authToken?: boolean;
+  authTokenDetected?: boolean;
   cpus: number;
   memory: string;
   disk: string;
+}
+
+function DetectedTag() {
+  return <Text color="yellow"> (detected)</Text>;
 }
 
 function ConfirmUI({
@@ -150,19 +159,19 @@ function ConfirmUI({
       {/* Git Config */}
       <Box flexDirection="column">
         <Text bold color="cyan">  Git</Text>
-        <Text>    Repo:      {params.repo}</Text>
+        <Text>    Repo:      {params.repo}{params.repoDetected && <DetectedTag />}</Text>
         {params.gitUser && <Text>    Username:  {params.gitUser}</Text>}
         {params.gitToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text></Text>}
-        {params.gitName && <Text>    Author:    {params.gitName}</Text>}
-        {params.gitEmail && <Text>    Email:     {params.gitEmail}</Text>}
+        {params.gitName && <Text>    Author:    {params.gitName}{params.gitNameDetected && <DetectedTag />}</Text>}
+        {params.gitEmail && <Text>    Email:     {params.gitEmail}{params.gitEmailDetected && <DetectedTag />}</Text>}
       </Box>
 
       {/* Claude Config */}
       {hasClaudeConfig && (
         <Box flexDirection="column">
           <Text bold color="cyan">  Claude</Text>
-          {params.baseUrl && <Text>    Base URL:  {params.baseUrl}</Text>}
-          {params.authToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text></Text>}
+          {params.baseUrl && <Text>    Base URL:  {params.baseUrl}{params.baseUrlDetected && <DetectedTag />}</Text>}
+          {params.authToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text>{params.authTokenDetected && <DetectedTag />}</Text>}
         </Box>
       )}
 
@@ -230,8 +239,9 @@ export async function createCommand(
     packages = options.packages.split(',').map((p) => p.trim());
   }
 
-  // Determine repo
-  const repo = options.repo || (await detectGitRepo());
+  // Determine repo (track if detected)
+  const detectedRepo = !options.repo ? await detectGitRepo() : undefined;
+  const repo = options.repo || detectedRepo;
   if (!repo) {
     render(
       <StatusLine
@@ -246,10 +256,14 @@ export async function createCommand(
   const detectedGit = await detectGitConfig();
   const gitName = options.gitName || detectedGit.name;
   const gitEmail = options.gitEmail || detectedGit.email;
+  const gitNameDetected = !options.gitName && !!detectedGit.name;
+  const gitEmailDetected = !options.gitEmail && !!detectedGit.email;
 
   // Auto-detect Claude config from environment
-  const baseUrl = options.baseUrl || process.env.ANTHROPIC_BASE_URL;
-  const authToken = options.authToken || process.env.ANTHROPIC_AUTH_TOKEN;
+  const detectedBaseUrl = !options.baseUrl ? process.env.ANTHROPIC_BASE_URL : undefined;
+  const detectedAuthToken = !options.authToken ? process.env.ANTHROPIC_AUTH_TOKEN : undefined;
+  const baseUrl = options.baseUrl || detectedBaseUrl;
+  const authToken = options.authToken || detectedAuthToken;
 
   // Resolve VM configuration
   const vmCpus = options.cpus ? parseInt(options.cpus) : config.vm.cpus;
@@ -260,14 +274,19 @@ export async function createCommand(
   const confirmed = await waitForConfirmation({
     name,
     repo,
+    repoDetected: !!detectedRepo,
     packages,
     preset: options.preset,
     gitUser: options.gitUser,
     gitToken: !!options.gitToken,
     gitName,
+    gitNameDetected,
     gitEmail,
+    gitEmailDetected,
     baseUrl,
+    baseUrlDetected: !!detectedBaseUrl,
     authToken: !!authToken,
+    authTokenDetected: !!detectedAuthToken,
     cpus: vmCpus,
     memory: vmMemory,
     disk: vmDisk,
