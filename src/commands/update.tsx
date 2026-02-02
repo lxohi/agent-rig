@@ -2,36 +2,43 @@ import React from 'react';
 import { render, Text, Box } from 'ink';
 import { fetchLatestVersion } from '../lib/github-release.js';
 import { isNewerVersion } from '../lib/version.js';
-import { spawnBackgroundDownloader } from '../lib/downloader.js';
+import { downloadUpdate } from '../lib/downloader.js';
 import { StatusLine } from '../components/StatusLine.js';
 import { Spinner } from '../components/Spinner.js';
 import { VERSION } from '../version.js';
 
-function CheckingUI() {
-  return (
-    <Spinner message="Checking for updates..." />
-  );
+function CheckingUI({ message }: { message: string }) {
+  return <Spinner message={message} />;
 }
 
 export async function updateCommand(): Promise<void> {
-  const { unmount } = render(<CheckingUI />);
+  const { rerender, unmount } = render(<CheckingUI message="Checking for updates..." />);
 
   try {
     const latestVersion = await fetchLatestVersion();
-    unmount();
 
     if (isNewerVersion(latestVersion, VERSION)) {
-      render(
-        <Box flexDirection="column" gap={1}>
-          <Text>
-            <Text color="yellow">Update available:</Text> v{VERSION} → v{latestVersion}
-          </Text>
-          <Text dimColor>Downloading in background. Restart arig to apply.</Text>
-        </Box>
-      );
-      // Trigger background download
-      spawnBackgroundDownloader();
+      rerender(<CheckingUI message={`Downloading v${latestVersion}...`} />);
+
+      const result = await downloadUpdate(latestVersion);
+      unmount();
+
+      if (result.success) {
+        render(
+          <Box flexDirection="column">
+            <Text color="green">✓</Text>
+            <Text> Downloaded v{latestVersion}</Text>
+            <Text dimColor>  Restart arig to apply the update.</Text>
+          </Box>
+        );
+      } else {
+        render(
+          <StatusLine status="error" message={`Download failed: ${result.error}`} />
+        );
+        process.exit(1);
+      }
     } else {
+      unmount();
       render(
         <StatusLine status="success" message={`Already up to date (v${VERSION})`} />
       );

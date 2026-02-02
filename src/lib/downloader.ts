@@ -5,6 +5,53 @@ import { loadUpdateState, saveUpdateState, getInstallDir } from './update-state.
 import { fetchLatestVersion, getBinaryUrl, getPlatform } from './github-release.js';
 import { isNewerVersion } from './version.js';
 
+export interface DownloadResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Download update synchronously (for arig update command)
+ */
+export async function downloadUpdate(version: string, installDir?: string): Promise<DownloadResult> {
+  const dir = installDir || getInstallDir();
+  const state = await loadUpdateState(dir);
+
+  try {
+    const { os, arch } = getPlatform();
+    const url = getBinaryUrl(version, os, arch);
+
+    // Create staging directory
+    const stagingDir = join(dir, 'staging', version);
+    await mkdir(stagingDir, { recursive: true });
+
+    const tmpPath = join(stagingDir, 'arig.tmp');
+    const finalPath = join(stagingDir, 'arig');
+
+    // Download binary
+    const response = await fetch(url);
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const buffer = await response.arrayBuffer();
+    await writeFile(tmpPath, Buffer.from(buffer));
+    await rename(tmpPath, finalPath);
+    await chmod(finalPath, 0o755);
+
+    // Update state with pending version
+    state.pendingVersion = version;
+    state.pendingPath = finalPath;
+    state.downloadPid = null;
+    state.downloadStarted = null;
+    await saveUpdateState(state, dir);
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
 export async function downloadInBackground(installDir?: string): Promise<void> {
   const dir = installDir || getInstallDir();
   const state = await loadUpdateState(dir);
