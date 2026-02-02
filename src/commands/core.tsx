@@ -1,8 +1,6 @@
 import React from 'react';
 import { render, Text, Box } from 'ink';
-import { readFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
   limaCreate,
   limaStart,
@@ -17,8 +15,7 @@ import { StatusLine } from '../components/StatusLine.js';
 import { stringify as stringifyYaml } from 'yaml';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { PROVISION_SCRIPT } from '../lib/provision-script.js';
 
 function CoreBuildUI({ tasks, error }: { tasks: Task[]; error?: string }) {
   return (
@@ -81,17 +78,12 @@ export async function coreBuildCommand(options: { force?: boolean }): Promise<vo
     updateTask('running');
     rerender(<CoreBuildUI tasks={tasks} />);
 
-    const provisionScript = await readFile(
-      join(__dirname, '..', 'assets', 'provision.sh'),
-      'utf-8'
-    );
-
     const limaConfig = buildLimaConfig({
       name: vmName,
       cpus: config.vm.cpus,
       memory: config.vm.memory,
       disk: config.vm.disk,
-      provisionScript,
+      provisionScript: PROVISION_SCRIPT,
     });
 
     // Write lima config to temp file

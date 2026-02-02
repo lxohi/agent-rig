@@ -33,7 +33,7 @@ describe('CLI Integration Tests', () => {
     it('shows version with --version', async () => {
       const { stdout, exitCode } = await runCli(['--version']);
       expect(exitCode).toBe(0);
-      expect(stdout).toContain('0.1.0');
+      expect(stdout).toMatch(/^\d+\.\d+\.\d+$/);
     });
   });
 
