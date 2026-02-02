@@ -139,8 +139,6 @@ function ConfirmUI({
     }
   });
 
-  const hasClaudeConfig = params.baseUrl || params.authToken;
-
   return (
     <Box flexDirection="column" gap={1}>
       <Text bold>Create sandbox with the following configuration:</Text>
@@ -152,7 +150,7 @@ function ConfirmUI({
         {params.preset ? (
           <Text>    Preset:    {params.preset}</Text>
         ) : (
-          <Text>    Packages:  {params.packages.length > 0 ? params.packages.join(', ') : '(none)'}</Text>
+          <Text>    Packages:  {params.packages.length > 0 ? params.packages.join(', ') : <Text dimColor>(none)</Text>}</Text>
         )}
       </Box>
 
@@ -160,20 +158,18 @@ function ConfirmUI({
       <Box flexDirection="column">
         <Text bold color="cyan">  Git</Text>
         <Text>    Repo:      {params.repo}{params.repoDetected && <DetectedTag />}</Text>
-        {params.gitUser && <Text>    Username:  {params.gitUser}</Text>}
-        {params.gitToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text></Text>}
-        {params.gitName && <Text>    Author:    {params.gitName}{params.gitNameDetected && <DetectedTag />}</Text>}
-        {params.gitEmail && <Text>    Email:     {params.gitEmail}{params.gitEmailDetected && <DetectedTag />}</Text>}
+        <Text>    Username:  {params.gitUser || <Text dimColor>(not set, public access only)</Text>}</Text>
+        <Text>    Token:     {params.gitToken ? <Text dimColor>&lt;provided&gt;</Text> : <Text dimColor>(not set)</Text>}</Text>
+        <Text>    Author:    {params.gitName ? <>{params.gitName}{params.gitNameDetected && <DetectedTag />}</> : <Text dimColor>(not set)</Text>}</Text>
+        <Text>    Email:     {params.gitEmail ? <>{params.gitEmail}{params.gitEmailDetected && <DetectedTag />}</> : <Text dimColor>(not set)</Text>}</Text>
       </Box>
 
       {/* Claude Config */}
-      {hasClaudeConfig && (
-        <Box flexDirection="column">
-          <Text bold color="cyan">  Claude</Text>
-          {params.baseUrl && <Text>    Base URL:  {params.baseUrl}{params.baseUrlDetected && <DetectedTag />}</Text>}
-          {params.authToken && <Text>    Token:     <Text dimColor>&lt;provided&gt;</Text>{params.authTokenDetected && <DetectedTag />}</Text>}
-        </Box>
-      )}
+      <Box flexDirection="column">
+        <Text bold color="cyan">  Claude</Text>
+        <Text>    Base URL:  {params.baseUrl ? <>{params.baseUrl}{params.baseUrlDetected && <DetectedTag />}</> : <Text dimColor>(default)</Text>}</Text>
+        <Text>    Token:     {params.authToken ? <><Text dimColor>&lt;provided&gt;</Text>{params.authTokenDetected && <DetectedTag />}</> : <Text dimColor>(not set)</Text>}</Text>
+      </Box>
 
       {/* VM Config */}
       <Box flexDirection="column">
