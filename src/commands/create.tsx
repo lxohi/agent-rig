@@ -99,9 +99,11 @@ interface ConfirmParams {
   repo: string;
   packages: string[];
   preset?: string;
+  gitUser?: string;
   gitName?: string;
   gitEmail?: string;
   baseUrl?: string;
+  authToken?: string;
   cpus: number;
   memory: string;
   disk: string;
@@ -127,39 +129,52 @@ function ConfirmUI({
     }
   });
 
+  const hasGitConfig = params.gitUser || params.gitName || params.gitEmail;
+  const hasClaudeConfig = params.baseUrl || params.authToken;
+
   return (
     <Box flexDirection="column" gap={1}>
       <Text bold>Create sandbox with the following configuration:</Text>
-      <Box flexDirection="column" paddingLeft={2}>
-        <Text>
-          <Text dimColor>Name:</Text> {params.name}
-        </Text>
-        <Text>
-          <Text dimColor>Repository:</Text> {params.repo}
-        </Text>
-        <Text>
-          <Text dimColor>Packages:</Text>{' '}
-          {params.packages.length > 0 ? params.packages.join(', ') : '(none)'}
-        </Text>
-        {params.preset && (
-          <Text>
-            <Text dimColor>Preset:</Text> {params.preset}
-          </Text>
+
+      {/* Basic Info */}
+      <Box flexDirection="column">
+        <Text bold color="cyan">  Sandbox</Text>
+        <Text>    Name:      {params.name}</Text>
+        <Text>    Repo:      {params.repo}</Text>
+        {params.preset ? (
+          <Text>    Preset:    {params.preset}</Text>
+        ) : (
+          <Text>    Packages:  {params.packages.length > 0 ? params.packages.join(', ') : '(none)'}</Text>
         )}
-        {(params.gitName || params.gitEmail) && (
-          <Text>
-            <Text dimColor>Git Author:</Text> {params.gitName || ''} {params.gitEmail ? `<${params.gitEmail}>` : ''}
-          </Text>
-        )}
-        {params.baseUrl && (
-          <Text>
-            <Text dimColor>API Base URL:</Text> {params.baseUrl}
-          </Text>
-        )}
-        <Text>
-          <Text dimColor>VM:</Text> {params.cpus} CPUs, {params.memory} memory, {params.disk} disk
-        </Text>
       </Box>
+
+      {/* Git Config */}
+      {hasGitConfig && (
+        <Box flexDirection="column">
+          <Text bold color="cyan">  Git</Text>
+          {params.gitUser && <Text>    Auth:      {params.gitUser}</Text>}
+          {params.gitName && <Text>    Name:      {params.gitName}</Text>}
+          {params.gitEmail && <Text>    Email:     {params.gitEmail}</Text>}
+        </Box>
+      )}
+
+      {/* Claude Config */}
+      {hasClaudeConfig && (
+        <Box flexDirection="column">
+          <Text bold color="cyan">  Claude</Text>
+          {params.baseUrl && <Text>    Base URL:  {params.baseUrl}</Text>}
+          {params.authToken && <Text>    Token:     ********</Text>}
+        </Box>
+      )}
+
+      {/* VM Config */}
+      <Box flexDirection="column">
+        <Text bold color="cyan">  VM Resources</Text>
+        <Text>    CPUs:      {params.cpus}</Text>
+        <Text>    Memory:    {params.memory}</Text>
+        <Text>    Disk:      {params.disk}</Text>
+      </Box>
+
       <Text>
         <Text dimColor>Press</Text> <Text color="green">Y</Text> <Text dimColor>to continue,</Text>{' '}
         <Text color="red">N</Text> <Text dimColor>to cancel</Text>
@@ -248,9 +263,11 @@ export async function createCommand(
     repo,
     packages,
     preset: options.preset,
+    gitUser: options.gitUser,
     gitName,
     gitEmail,
     baseUrl,
+    authToken,
     cpus: vmCpus,
     memory: vmMemory,
     disk: vmDisk,
