@@ -20,20 +20,27 @@ export interface LimaConfig {
 }
 
 export function parseLimaList(output: string): LimaVM[] {
-  try {
-    const parsed = JSON.parse(output);
-    // limactl list --json returns a single object when there's one VM,
-    // or an array when there are multiple VMs, or empty string when none
-    if (Array.isArray(parsed)) {
-      return parsed as LimaVM[];
-    }
-    if (parsed && typeof parsed === 'object') {
-      return [parsed as LimaVM];
-    }
-    return [];
-  } catch {
+  if (!output.trim()) {
     return [];
   }
+
+  // limactl list --json outputs NDJSON (one JSON object per line)
+  const lines = output.trim().split('\n');
+  const vms: LimaVM[] = [];
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object') {
+        vms.push(parsed as LimaVM);
+      }
+    } catch {
+      // Skip invalid lines
+    }
+  }
+
+  return vms;
 }
 
 export function buildLimaConfig(options: {
