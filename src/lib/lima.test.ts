@@ -3,18 +3,19 @@ import { parseLimaList, buildLimaConfig } from './lima.js';
 
 describe('lima', () => {
   describe('parseLimaList', () => {
-    it('parses lima list JSON output with multiple VMs', () => {
-      const output = JSON.stringify([
-        { name: 'test-vm', status: 'Running', dir: '/path/to/vm', arch: 'aarch64' },
-        { name: 'other-vm', status: 'Stopped', dir: '/path/to/other', arch: 'aarch64' },
-      ]);
+    it('parses lima list NDJSON output with multiple VMs', () => {
+      // limactl list --json outputs NDJSON (one JSON object per line)
+      const output = [
+        JSON.stringify({ name: 'test-vm', status: 'Running', dir: '/path/to/vm', arch: 'aarch64' }),
+        JSON.stringify({ name: 'other-vm', status: 'Stopped', dir: '/path/to/other', arch: 'aarch64' }),
+      ].join('\n');
       const vms = parseLimaList(output);
       expect(vms).toHaveLength(2);
       expect(vms[0].name).toBe('test-vm');
       expect(vms[0].status).toBe('Running');
     });
 
-    it('parses lima list JSON output with single VM (object not array)', () => {
+    it('parses lima list NDJSON output with single VM', () => {
       const output = JSON.stringify(
         { name: 'single-vm', status: 'Stopped', dir: '/path/to/vm', arch: 'aarch64' }
       );
@@ -23,8 +24,8 @@ describe('lima', () => {
       expect(vms[0].name).toBe('single-vm');
     });
 
-    it('returns empty array for empty array output', () => {
-      const vms = parseLimaList('[]');
+    it('returns empty array for empty output', () => {
+      const vms = parseLimaList('');
       expect(vms).toEqual([]);
     });
 

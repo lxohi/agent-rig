@@ -51,7 +51,14 @@ function ListOutput({ sandboxes }: { sandboxes: SandboxInfo[] }) {
 
 export async function listCommand(): Promise<void> {
   const sandboxNames = await listSandboxes();
-  const vms = await limaList();
+
+  // Try to get VM status from lima, but don't fail if lima is not installed
+  let vms: Awaited<ReturnType<typeof limaList>> = [];
+  try {
+    vms = await limaList();
+  } catch {
+    // Lima not installed or not available - continue without VM status
+  }
 
   const sandboxes: SandboxInfo[] = await Promise.all(
     sandboxNames.map(async (name) => {
