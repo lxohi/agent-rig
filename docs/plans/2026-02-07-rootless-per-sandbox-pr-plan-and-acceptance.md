@@ -1,362 +1,336 @@
-# agent-rig 分阶段 PR 实施方案与验收标准
+# agent-rig 分阶段 PR 实施方案与验收标准（更新版）
 
 ## 1. 文档目标
 
-本文件给出可直接执行的分阶段 PR 计划，覆盖：
+本文件定义从当前实现迁移到 `rootless-per-sandbox` 的完整 PR 执行路径，覆盖以下整体目标：
 
-- 从当前 Lima VM 主路径迁移到 `rootless-per-sandbox`。
-- 支持 Linux 与 macOS（shared VM）双平台。
-- 新增端口映射能力，且支持对已存在 sandbox 动态追加。
-- 每个 PR 的验收标准、测试要求与回滚策略。
+- 提供对 coding agent 友好的隔离运行环境，sandbox 内具备高自治执行能力。
+- 支持 Docker/Compose 工作流，允许在 sandbox 内启动项目依赖容器与项目服务。
+- 支持工具组合与复用（例如 `jvm17`、`node22`），并具备可控缓存机制。
+- 支持 Linux 与 macOS（shared VM）双平台，且 Linux 不依赖嵌套虚拟化。
+- 支持端口映射全生命周期管理，包含“已存在 sandbox 动态追加映射”。
+- 提供清晰升级与回滚路径。
 
-配套设计文档：`docs/plans/2026-02-07-rootless-per-sandbox-design.md`
+在上述整体目标基础上，本版本同时闭环 review 提出的关键风险：
 
-## 2. 里程碑与阶段划分
+- `arigd` 规格与落地顺序不清。
+- Linux 用户管理与 root 权限模型不清。
+- 端口转发机制未决策。
+- macOS shared VM bootstrap/升级/修复缺失。
+- 命令迁移集中在单个高风险 PR。
+- 日志与诊断上线过晚。
 
-### 阶段 A（架构落地）
+配套文档：
 
-- PR-01: Runtime 抽象层 + legacy 适配
-- PR-02: 数据模型升级（ports/runtime/tools）
-- PR-03: `port` CLI 子命令与配置层落地
+- 方案总览：`docs/plans/2026-02-07-rootless-per-sandbox-design.md`
+- `arigd` 细化：`docs/plans/2026-02-07-arigd-runtime-design.md`
 
-### 阶段 B（Linux 主路径可用）
+## 2. 前置架构决议（编码前锁定）
 
-- PR-04: Linux `rootless-per-sandbox` 生命周期
-- PR-05: Linux 动态端口映射引擎（运行中即时生效）
+## 2.1 `arigd` 通信与状态
 
-### 阶段 C（macOS 主路径可用）
+- 传输：Unix socket + JSON-RPC。
+- 运行态存储：SQLite + WAL（`~/.agent-rig/runtime/state.db`）。
+- CLI 与 daemon 分离：`arig` 管配置态，`arigd` 管运行态。
 
-- PR-06: macOS shared VM 控制通道与 runtime 驱动
-- PR-07: macOS 端口 relay 与持久化
+## 2.2 Linux 权限模型
 
-### 阶段 D（体验收敛与 GA）
+- `arigd` 常驻进程保持 rootless。
+- 通过 `arig setup` 一次性安装受限 root helper（sudoers 白名单）。
+- 仅“用户创建/删除、资源回收”等动作使用 helper。
 
-- PR-08: 命令迁移与 legacy 兼容闭环
-- PR-09: 工具组合与缓存升级（node-22/java-17）
-- PR-10: 发布收口（文档、观测、迁移工具）
+## 2.3 端口转发机制
 
-## 3. PR 详细计划
+- 采用 `arigd` 内置 userspace TCP proxy。
+- 首版只支持 `tcp`，避免内核特权依赖。
 
-## PR-01 Runtime 抽象层 + Legacy 适配
+## 2.4 日志策略
+
+- PR-01 即启用结构化日志（JSON）。
+- 不是 GA 才补；调试能力从基础阶段开始可用。
+
+## 3. 阶段与 PR 序列
+
+### 阶段 A：基础设施落地（A0-A3）
+
+- PR-01: Runtime 抽象层 + 结构化日志 + 命令迁移波次1（低风险命令）
+- PR-02: Sandbox 配置模型升级（runtime/tools/ports）
+- PR-03: `arigd` 核心骨架（daemon、协议、状态库、reconcile 框架）
+- PR-04: Linux 权限路径（`arig setup` + root helper）与安全边界
+
+### 阶段 B：Linux Beta（B1-B2）
+
+- PR-05: Linux rootless-per-sandbox 生命周期 + 命令迁移波次2
+- PR-06: Linux 动态端口映射数据面（userspace proxy）与在线追加
+
+### 阶段 C：macOS Beta（C1-C2）
+
+- PR-07: shared VM bootstrap/升级/修复 + VM 内 `arigd` 部署
+- PR-08: macOS runtime driver + 双跳端口 relay
+
+### 阶段 D：GA 收敛（D1-D2）
+
+- PR-09: 工具组合缓存 v2（含失效策略）与 `node-22/java-17` 完整支持
+- PR-10: 发布收口（文档、迁移、诊断、观测基线）
+
+## 4. PR 详细定义
+
+## PR-01 Runtime 抽象层 + 日志 + 命令迁移波次1
 
 **目标**
-- 去除命令层对 `lima.ts` 的直接强耦合，为新旧 runtime 共存打基础。
+- 完成 runtime 抽象落地，减少命令层直接依赖 `lima.ts`。
+- 提前上线结构化日志，便于后续排障。
 
 **主要变更**
 - 新增 `src/lib/runtime/types.ts`
 - 新增 `src/lib/runtime/index.ts`
-- 新增 `src/lib/runtime/legacy-lima.ts`
-- 局部改造命令，先接入 `runtimeFactory`（功能不变）
-
-**接口建议**
-- `RuntimeDriver.createSandbox(...)`
-- `RuntimeDriver.startSandbox(...)`
-- `RuntimeDriver.stopSandbox(...)`
-- `RuntimeDriver.destroySandbox(...)`
-- `RuntimeDriver.exec(...)`
-- `RuntimeDriver.getStatus(...)`
+- 新增 `src/lib/logging.ts`（JSON logger）
+- 迁移低风险命令：`list/info` 先走 runtime 抽象
 
 **测试要求**
-- 单测：driver factory、legacy driver 参数映射。
-- 集成：`create/list/start/stop/destroy` 现有行为不回归。
+- 单测：driver factory、日志格式。
+- 集成：`list/info` 行为无回归。
 
-**PR 验收标准**
-- 所有现有命令对 legacy sandbox 行为一致。
-- `npm run test:run` 全绿。
-- 无新增 breaking CLI 参数。
+**验收标准**
+- runtime 抽象可用，命令行为稳定。
+- 日志文件可输出 `requestId/sandbox/event/error` 基础字段。
 
-**回滚策略**
-- 保留原 `lima.ts`，可将 factory 默认固定回 legacy。
-
-## PR-02 数据模型升级（ports/runtime/tools）
+## PR-02 配置模型升级
 
 **目标**
-- 扩展 sandbox 配置结构，支持 runtime 元数据和端口映射持久化。
+- 扩展配置模型，支持 ports/runtime/tools。
 
 **主要变更**
 - 修改 `src/lib/types.ts`
 - 修改 `src/lib/sandbox.ts`
-- 新增兼容迁移函数（旧 config 自动补默认值）
-
-**数据结构新增**
-- `sandbox.runtime`
-- `sandbox.tools`
-- `sandbox.ports[]`
 
 **测试要求**
-- 单测：旧配置读取后自动补齐字段。
-- 单测：新配置读写幂等（save/load 不丢字段）。
+- 单测：新 config 读写幂等。
 
-**PR 验收标准**
-- 旧 sandbox 可正常 `list/info/start/stop`。
-- 新增字段在 `config.yml` 持久化正确。
+**验收标准**
+- 新字段可正确持久化并被命令读取。
 
-**回滚策略**
-- 新字段均为可选，legacy 读取不受影响。
-
-## PR-03 port CLI 子命令与配置层落地
+## PR-03 `arigd` 核心骨架
 
 **目标**
-- 先完成控制面 API：新增/删除/查看端口映射，先以配置持久化为主。
+- 把 `arigd` 从“概念”变为可运行组件。
+
+**主要变更**
+- 新增 `src/daemon/arigd.ts`
+- 新增 `src/lib/runtime/daemon-protocol.ts`
+- 新增 `src/lib/runtime/daemon-client.ts`
+- 新增 `src/daemon/store/*`（SQLite state）
+- 新增 `src/daemon/reconcile/*`（恢复框架）
+
+**实现范围**
+- 先实现 `runtime.ping/version`、`sandbox.inspect`、`port.list`。
+- 建立启动、连接、超时、错误码规范。
+
+**测试要求**
+- 集成：CLI 可发现 daemon 并完成 ping/version。
+- 故障：daemon 重启后可加载 state.db。
+
+**验收标准**
+- Linux 本机可稳定运行 `arigd` 并被 CLI 调用。
+- 协议、状态库和错误码具备文档化定义。
+
+## PR-04 Linux 权限模型与 `arig setup`
+
+**目标**
+- 明确并落地 root 需求边界。
+
+**主要变更**
+- 新增 `src/commands/setup.tsx`
+- 新增 root helper 客户端/调用封装
+- 新增最小 sudoers 模板与安装逻辑（安全校验）
+
+**测试要求**
+- 集成：未 setup 时创建 sandbox 给出明确错误。
+- 集成：setup 后可执行用户创建/删除路径。
+
+**验收标准**
+- `arigd` 本体仍为 rootless。
+- root helper 仅允许白名单操作，审计日志可查。
+
+## PR-05 Linux rootless-per-sandbox 生命周期 + 命令迁移波次2
+
+**目标**
+- Linux 默认路径切换到 rootless-per-sandbox。
+- 把核心命令迁移到 runtime 层，避免后置大爆炸迁移。
+
+**主要变更**
+- 新增 `src/lib/runtime/linux-rootless.ts`
+- 新增 `src/lib/runtime/linux/*`（user/daemon/workspace/session）
+- 迁移命令：`create/start/stop/destroy/attach/exec`
+
+**测试要求**
+- 集成：create -> exec docker -> stop -> start -> attach。
+
+**验收标准**
+- Linux 创建不再依赖 VM 与嵌套虚拟化。
+- 核心命令均走 runtime 抽象。
+
+## PR-06 Linux 端口映射数据面（userspace proxy）
+
+**目标**
+- 支持已存在 sandbox 在线追加端口映射。
 
 **主要变更**
 - 新增 `src/commands/port.tsx`
 - 修改 `src/index.tsx` 注册 `port` 子命令
-- 新增 `src/lib/ports.ts`（校验、冲突检测、序列化）
+- 新增 `src/lib/ports.ts`
+- 新增 `src/lib/runtime/linux/port-proxy.ts`
+- 扩展 `info` 展示 `active/pending/error`
 
-**命令形态**
-- `arig port add <sandbox> --host <h> --target <t> --proto tcp`
-- `arig port remove <sandbox> --host <h>`
-- `arig port list <sandbox>`
+**行为要求**
+- running 时 `port add` 立即生效。
+- stopped 时 `port add` 记录 `pending`，start 后自动应用。
+- `port remove` 运行中即时撤销。
 
 **测试要求**
-- 单测：参数校验、重复规则检测、`--host 0` 分配逻辑。
-- 集成：对已存在 sandbox 执行 `port add/list/remove`。
+- 集成：运行中追加端口并可访问。
+- 集成：停止态追加，启动后恢复。
+- 冲突：端口占用时明确报错且不污染 active 状态。
 
-**PR 验收标准**
-- 已存在 sandbox 可成功写入端口配置。
-- 错误输入有明确报错信息（端口范围、协议、重复冲突）。
+**验收标准**
+- 已存在 sandbox 支持动态端口追加（核心需求）。
 
-**回滚策略**
-- `port` 命令可 feature flag 控制隐藏，不影响主流程。
-
-## PR-04 Linux rootless-per-sandbox 生命周期
+## PR-07 macOS shared VM bootstrap/升级/修复
 
 **目标**
-- Linux 上新建 sandbox 不再依赖 VM，跑在 rootless-per-sandbox。
+- 解决 macOS 路径的初始化与长期维护问题。
 
 **主要变更**
-- 新增 `src/lib/runtime/linux-rootless.ts`
-- 新增 `src/lib/runtime/linux/*`（用户、daemon、workspace、session）
-- 命令层在 Linux 默认切换新 driver
-
-**实现要点**
-- 每 sandbox 独立用户与 rootless dockerd。
-- 独立 `DOCKER_HOST` 与 `data-root`。
-- start/stop 管理 daemon 与 agent session 生命周期。
+- 新增 `src/lib/runtime/macos/bootstrap.ts`
+- 新增 `runtime init/status/upgrade/repair`（命令或子命令）
+- VM 内 `arigd` 与 helper 的部署逻辑
 
 **测试要求**
-- 集成：Linux create -> exec docker -> stop -> start -> attach。
-- 健康检查：daemon socket 可连接、`docker ps` 可执行。
+- 首次 init、二次 warm 启动。
+- 版本不兼容时 upgrade 提示与恢复流程。
 
-**PR 验收标准**
-- Linux 运行不依赖 KVM/嵌套虚拟化。
-- 基础开发流程可用：git clone、docker compose、agent attach。
+**验收标准**
+- macOS 不再每 sandbox 建 VM。
+- shared VM 状态漂移时有可执行修复路径。
 
-**回滚策略**
-- 增加 `ARIG_RUNTIME=legacy-lima` 强制回退。
-
-## PR-05 Linux 动态端口映射引擎
+## PR-08 macOS runtime driver + 端口 relay
 
 **目标**
-- 在 Linux 实现端口映射运行态：运行中即时生效，停止后持久恢复。
-
-**主要变更**
-- 新增 `src/lib/runtime/linux/port-forward.ts`
-- 修改 `start/stop/info` 命令关联端口状态
-- `port add/remove` 调用 runtime apply/revoke
-
-**实现要点**
-- 运行中 `port add` 立即创建 listener。
-- 停止中 `port add` 记录 `pending`，start 时 apply。
-- 支持 `bind=127.0.0.1` 默认策略，`--public` 显式开启。
-
-**测试要求**
-- 集成：对运行中 sandbox 动态添加端口后可访问。
-- 集成：sandbox 停止后添加端口，重启后自动生效。
-- 冲突测试：端口占用时报错并不污染配置。
-
-**PR 验收标准**
-- 已存在 sandbox 的 `port add` 可在线生效。
-- `port list` 能展示 `active/pending/error` 状态。
-
-**回滚策略**
-- runtime apply 失败时仅保留 pending 配置，不中断 sandbox 主流程。
-
-## PR-06 macOS shared VM 驱动
-
-**目标**
-- macOS 统一迁移到 shared VM + rootless-per-sandbox 模型。
+- 打通 host -> shared VM -> sandbox 的统一运行语义。
 
 **主要变更**
 - 新增 `src/lib/runtime/macos-sharedvm.ts`
-- 新增 `src/lib/runtime/macos/*`（VM boot、通信、远程执行）
-- 新增 `arig runtime init/status`（可选）
-
-**实现要点**
-- 首次初始化 shared VM，后续复用。
-- `arig` 与 VM 内 `arigd` 建立稳定通道。
-- sandbox 生命周期委托给 VM 内 Linux 逻辑。
+- 新增 `src/lib/runtime/macos/relay.ts`
+- `port add/remove/list` 在 macOS 驱动下可用
 
 **测试要求**
-- 集成：macOS 首次初始化、二次热启动。
-- 集成：create/start/exec/attach 正常。
+- 集成：运行中/停止态端口映射行为与 Linux 对齐。
+- 故障：relay 中断后的恢复与状态可见性。
 
-**PR 验收标准**
-- macOS 不再按 sandbox 创建 VM。
-- warm 状态 attach 延迟达到预期阈值（见第 4 节）。
+**验收标准**
+- macOS 与 Linux 端口映射语义一致。
 
-**回滚策略**
-- 支持 `ARIG_RUNTIME=legacy-lima` 回退老路径。
-
-## PR-07 macOS 端口 relay 与持久化
+## PR-09 工具缓存 v2 + 失效策略
 
 **目标**
-- 打通 macOS 端口映射双跳链路，并确保重启恢复。
+- 工具组合缓存可控、可失效、可追踪。
 
 **主要变更**
-- 新增 `src/lib/runtime/macos/port-relay.ts`
-- `port add/remove/list` 支持 macOS driver
-- 状态文件记录 relay listener 与映射关系
-
-**实现要点**
-- `macHost:hostPort -> sharedVM relay -> sandbox:targetPort`
-- CLI 退出后 relay 不中断。
+- 扩展 `packages/` 与别名映射（`jvm17`、`node22`）
+- 缓存 key 从“工具列表”升级为：
+  - 工具列表 hash
+  - 安装脚本内容 hash
+  - 基础 runtime 版本
 
 **测试要求**
-- 集成：运行中动态加端口、停止后加端口并重启恢复。
-- 异常：relay crash 自动恢复或状态可见。
+- 单测：缓存 key 幂等与失效触发。
+- 集成：脚本变更后可触发重建。
 
-**PR 验收标准**
-- 与 Linux 语义一致：在线追加、持久化恢复、冲突可报错。
+**验收标准**
+- `java-17 + node-22` 可组合可复用。
+- 缓存失效行为符合预期。
 
-**回滚策略**
-- relay 失败时降级为 pending，提示用户重试。
-
-## PR-08 命令迁移与 legacy 兼容闭环
+## PR-10 发布收口
 
 **目标**
-- 所有命令统一走 runtime 层，legacy 与新 runtime 并存可用。
+- 收敛文档、迁移与稳定性门禁，形成可发布版本。
 
 **主要变更**
-- 改造 `src/commands/create.tsx`
-- 改造 `src/commands/start.tsx`
-- 改造 `src/commands/stop.tsx`
-- 改造 `src/commands/destroy.tsx`
-- 改造 `src/commands/exec.tsx`
-- 改造 `src/commands/attach.tsx`
-- 改造 `src/commands/info.tsx`（展示端口与 runtime）
+- 更新 `README.md`
+- 更新 `docs/ARCHITECTURE.md`
+- 补充迁移与排障文档
+- 强化 `arig diagnose` 输出
 
 **测试要求**
-- 回归：所有命令帮助文本与基础交互稳定。
-- 混合场景：legacy sandbox + 新 sandbox 同机操作。
+- Linux/macOS E2E 冒烟。
+- 故障注入：daemon 崩溃、端口冲突、VM 不可达。
 
-**PR 验收标准**
-- 用户不需要理解 runtime 差异即可完成日常操作。
-- `info` 输出包含端口映射与状态。
+**验收标准**
+- 具备独立安装、迁移、诊断能力。
 
-**回滚策略**
-- 按 sandbox 粒度选择 driver，不需全局回滚。
+## 5. 分级验收标准
 
-## PR-09 工具组合与缓存升级
-
-**目标**
-- 完成 `node-22`、`java-17` 组合能力及缓存复用。
-
-**主要变更**
-- 扩展 `packages/`（新增/升级工具定义）
-- 新增工具别名解析（`jvm17 -> java-17`, `node22 -> node-22`）
-- 调整 hash 与缓存策略（工具顺序无关）
-
-**测试要求**
-- 单测：工具解析、hash 幂等。
-- 集成：不同顺序工具组合命中同一缓存。
-
-**PR 验收标准**
-- 典型组合可用：`java-17 + node-22`。
-- 重复创建命中缓存，创建耗时明显下降。
-
-**回滚策略**
-- 工具安装失败不污染基础 runtime，可重试安装。
-
-## PR-10 发布收口（文档、观测、迁移工具）
-
-**目标**
-- 形成可发布版本，补齐运维可观测与迁移说明。
-
-**主要变更**
-- 更新 `README.md`、`docs/ARCHITECTURE.md`
-- 新增迁移文档（legacy -> rootless）
-- 新增日志与诊断命令（可选 `arig diagnose`）
-
-**测试要求**
-- E2E 冒烟：Linux/macOS 主流程。
-- 失败场景演练：端口冲突、daemon 失败、shared VM 不可达。
-
-**PR 验收标准**
-- 文档可独立指导安装、迁移、排障。
-- 发布分支满足质量门禁（见第 4 节）。
-
-**回滚策略**
-- 发布包可快速切回上一版本，配置向后兼容。
-
-## 4. 验收标准（分级）
-
-## 4.1 PR 级通用门禁
-
-每个 PR 必须满足：
+## 5.1 PR 级通用门禁
 
 - `npm run build` 成功。
 - `npm run test:run` 全绿。
-- 新增能力有对应测试（单测或集成测试）。
-- 无未说明的 CLI 行为变更。
+- 每个新能力都有测试用例。
+- CLI 变更必须更新帮助文本与文档。
 
-## 4.2 阶段门禁
+## 5.2 阶段门禁
 
 ### 阶段 A 完成标准
 
-- Runtime 抽象存在且 legacy 可正常工作。
-- `port` 配置能力可用（即使尚未全部运行时 apply）。
+- `arigd` 可运行可连接，协议稳定。
+- `arig setup` 权限路径可执行。
+- 日志可用于排障（非空字段、可关联 requestId）。
 
 ### 阶段 B 完成标准（Linux Beta）
 
-- Linux create/start/stop/exec/attach 全链路可用。
-- 运行中 `port add` 即时生效。
-- 停止态 `port add` 在下次 start 自动生效。
+- Linux 核心生命周期命令走新 runtime。
+- 已存在 sandbox 支持 `port add` 在线生效。
 
 ### 阶段 C 完成标准（macOS Beta）
 
-- shared VM 稳定复用，不按 sandbox 创建 VM。
-- macOS 端口 relay 语义与 Linux 对齐。
+- shared VM 可 init/upgrade/repair。
+- macOS 端口 relay 与 Linux 语义对齐。
 
 ### 阶段 D 完成标准（GA）
 
-- 新旧 sandbox 并存可稳定运行。
-- 文档、观测、迁移、回滚路径完备。
+- 文档、观测、回滚路径完备。
+- 稳定性与性能达到阈值（见 5.3）。
 
-## 4.3 量化指标（建议）
+## 5.3 量化指标
 
 - Linux：
-  - warm 创建（同工具缓存命中）P50 <= 20s
-  - `arig attach`（已运行）P50 <= 3s
+  - warm 创建 P50 <= 20s
+  - attach（运行中）P50 <= 3s
 - macOS：
-  - shared VM warm 下 `arig attach` P50 <= 5s
-  - 端口映射新增到可访问 P50 <= 2s
+  - warm attach P50 <= 5s
+  - 端口追加至可访问 P50 <= 2s
 - 稳定性：
-  - 连续 100 次 create/start/stop/destroy 成功率 >= 99%
+  - 100 次 create/start/stop/destroy 成功率 >= 99%
   - 端口映射恢复成功率 >= 99%
 
-## 4.4 功能验收清单（最终）
+## 5.4 最终功能验收清单
 
-- 能创建 sandbox 并执行 agent 自动任务。
-- sandbox 内可 `docker compose up` 启动依赖服务。
-- 已存在 sandbox 可执行 `arig port add` 并立刻访问。
-- 可查看端口状态并删除映射。
-- 同时支持 Linux 与 macOS。
-- 对 legacy sandbox 无破坏性回归。
+- sandbox 可执行 agent 自动任务与 Docker/Compose 工作流。
+- 已存在 sandbox 可动态添加和删除端口映射。
+- 端口映射状态可见（active/pending/error）。
+- Linux 无嵌套虚拟化依赖。
+- macOS 使用 shared VM 且可维护。
 
-## 5. 风险与应对
+## 6. 风险与回滚
 
-- 风险：rootless Docker 对部分场景兼容性不足。
-  - 应对：保留可选增强 profile（未来可扩展 sysbox）。
-- 风险：macOS relay 链路故障定位困难。
-  - 应对：加入端口状态机与诊断日志。
-- 风险：新旧路径并存增加复杂度。
-  - 应对：driver 边界严格，legacy 冻结新功能。
+- 风险：root helper 配置错误导致创建失败。
+  - 回滚：回退到上一稳定版本发布包，并重跑 `arig setup repair`。
+- 风险：port proxy 稳定性不足。
+  - 回滚：保持 pending，不中断 sandbox 主流程。
+- 风险：shared VM 升级失败。
+  - 回滚：保留上一个可用 VM 快照，CLI 提示降级运行。
 
-## 6. 执行建议
+## 7. 执行建议
 
-- 合并节奏建议：每个 PR 控制在 300~800 行净改动（除测试外）。
-- 强制要求：每个 PR 必带测试与迁移说明。
-- 发布建议：阶段 B/C 先打 Beta tag，阶段 D 再 GA。
-
+- 每个 PR 控制净改动规模，优先小步快跑。
+- 命令迁移分波次并行推进，不再保留单一“大迁移 PR”。
+- 每阶段结束输出一次 Beta 里程碑报告（问题、风险、下一阶段入口条件）。

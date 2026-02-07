@@ -142,7 +142,7 @@
 在 `SandboxConfig` 新增：
 
 - `runtime`:
-  - `driver` (`linux-rootless` | `macos-sharedvm-rootless` | `legacy-lima`)
+  - `driver` (`linux-rootless` | `macos-sharedvm-rootless`)
   - `sandboxId`
   - `sandboxUser`
   - `stateVersion`
@@ -174,35 +174,26 @@ lastError: ""
 - `src/lib/runtime/types.ts`
 - `src/lib/runtime/linux-rootless.ts`
 - `src/lib/runtime/macos-sharedvm.ts`
-- `src/lib/runtime/legacy-lima.ts`
 - `src/lib/ports.ts`
 - `src/commands/port.tsx`
 
 改造模块：
 
 - `src/lib/types.ts`：扩展 `SandboxConfig`、新增 `PortMapping`。
-- `src/lib/sandbox.ts`：支持新字段读写与兼容默认值。
+- `src/lib/sandbox.ts`：支持新字段读写与默认值处理。
 - `src/commands/create.tsx`：改为调用 runtime 抽象，支持 `--port`。
 - `src/commands/start.tsx`：启动时 apply pending ports。
 - `src/commands/stop.tsx`：优雅回收转发进程。
 - `src/commands/info.tsx`：展示端口映射状态。
 - `src/index.tsx`：注册 `port` 子命令。
 
-## 10. 兼容与迁移
+## 10. 实施路线
 
-迁移原则：
-
-- 不破坏已有 sandbox 使用。
-- `legacy-lima` 保留可读写、可启动停止。
-- 新建 sandbox 默认走 rootless runtime（按平台选择 driver）。
-
-迁移路径：
-
-1. 引入 `RuntimeDriver` 抽象，不改 CLI 行为。
+1. 引入 `RuntimeDriver` 抽象并切换命令层调用。
 2. 上线 Linux `linux-rootless`。
 3. 上线 macOS `shared VM` + `rootless-per-sandbox`。
 4. 上线 `port` 子命令与 create 时 `--port`。
-5. 将 `core/template` 命令标记为 legacy，仅用于旧环境维护。
+5. 下线 `core/template` VM 模板路径，统一到 runtime 模型。
 
 ## 11. 安全与运维要点
 
@@ -225,6 +216,5 @@ lastError: ""
   - 缓解：保留可选增强 profile（后续可评估 sysbox）。
 - 风险：macOS 双跳转发链路复杂。
   - 缓解：统一由 `arigd` 维护 listener 生命周期与健康检查。
-- 风险：旧流程与新流程并存导致代码复杂。
-  - 缓解：driver 分层，legacy 逐步冻结，只修复关键问题。
-
+- 风险：运行时能力增多导致代码复杂。
+  - 缓解：driver 分层与模块边界清晰，按阶段收敛。

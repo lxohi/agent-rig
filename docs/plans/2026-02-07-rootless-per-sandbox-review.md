@@ -1,136 +1,139 @@
-# Architectural Review: Rootless Per-Sandbox Rebuild Plan
+# Architectural Review: Rootless Per-Sandbox Rebuild Plan (Round 2)
 
-## Overall Assessment: Solid design with a few gaps worth addressing
+## Review Scope
 
-The plan is well-structured and addresses real pain points (Lima per-sandbox VM overhead, macOS cold-start latency, no port mapping, Linux nested-virt dependency). The phased PR approach is pragmatic. Below are findings, organized by severity.
+This is the second review pass, covering the updated versions of:
 
----
-
-## Critical Issues
-
-### 1. `arigd` daemon is under-specified
-
-The design introduces `arigd` as the runtime data plane — it manages sandbox lifecycle, rootless dockerd, port forwarding, and health checks. But neither document specifies:
-
-- How `arigd` is installed, started, or supervised (systemd unit? launchd? self-daemonizing?)
-- Its API surface (gRPC? HTTP? Unix socket? raw CLI calls over SSH?)
-- Its state management (in-memory only? WAL? crash recovery?)
-- How `arig` CLI discovers and connects to `arigd`
-
-This is the single most important architectural component in the new design, yet it reads like a hand-wave. **Recommendation:** Dedicate a section (or a separate design doc) to `arigd` — its lifecycle, API contract, failure modes, and upgrade path. Without this, PR-04 through PR-07 will be designed ad-hoc.
-
-### 2. Linux rootless sandbox user management requires root
-
-The plan says "each sandbox creates an independent Linux user (`arig_sb_<id>`)." But `useradd` requires root. This contradicts the "rootless" premise. Options:
-
-- Require `arig` to run as root (or with sudo) for create/destroy — but then document this clearly.
-- Use user namespaces (`unshare --user`) to avoid real user creation — but this changes the isolation model significantly.
-- Use a privileged setup daemon that only handles user creation.
-
-The plan doesn't address this. **Recommendation:** Explicitly state the privilege model. Suggestion: a one-time `arig setup` that runs as root to configure sudoers rules for user management only, keeping the runtime rootless.
-
-### 3. No `arigd` in the PR plan for Linux
-
-PR-04 jumps straight to "Linux rootless-per-sandbox lifecycle" but the design says `arigd` is the runtime daemon managing all of this. There's no PR that implements `arigd` itself. Is `arigd` a real daemon on Linux, or does `arig` CLI directly manage users/daemons/ports? The design doc says one thing, the PR plan implies another. **Recommendation:** Either add a PR-03.5 for `arigd` core daemon, or clarify that on Linux `arig` CLI directly orchestrates (no daemon), and `arigd` only exists inside the macOS shared VM.
+- `2026-02-07-rootless-per-sandbox-design.md`
+- `2026-02-07-rootless-per-sandbox-pr-plan-and-acceptance.md`
+- `2026-02-07-arigd-runtime-design.md` (new)
 
 ---
 
-## Significant Concerns
+## Round 1 Issue Tracker
 
-### 4. PR-08 is a landmine
+All 6 critical/significant issues from the first review have been resolved:
 
-PR-08 ("Command migration & legacy compat") modifies 7 command files simultaneously to route through the runtime abstraction. This is the highest-risk PR in the plan — it touches every user-facing command at once. If something breaks, the blast radius is the entire CLI.
+| # | Original Issue | Resolution | Status |
+|---|---|---|---|
+| 1 | `arigd` daemon under-specified | Dedicated `arigd-runtime-design.md` with API, state, lifecycle, recovery | Closed |
+| 2 | Linux user creation needs root | `arig setup` + root helper with sudoers whitelist (arigd doc Section 4) | Closed |
+| 3 | No `arigd` PR in sequence | PR-03 (arigd skeleton) + PR-04 (permission model) added | Closed |
+| 4 | PR-08 command migration landmine | Split into wave 1 (PR-01: list/info) + wave 2 (PR-05: core commands) | Closed |
+| 5 | macOS shared VM bootstrap missing | arigd doc Section 8 + PR-07 dedicated to init/upgrade/repair | Closed |
+| 6 | Port forwarding mechanism undecided | Decided: userspace TCP proxy in `arigd` (arigd doc Section 7) | Closed |
 
-**Recommendation:** Don't batch this. Instead, migrate commands incrementally inside PR-01 and PR-04/PR-06. By the time you reach "PR-08," every command should already be migrated. PR-08 as described is a sign that PR-01's "局部改造命令" scope is too narrow.
-
-### 5. macOS shared VM bootstrap is glossed over
-
-The plan says "首次初始化 shared VM，后续复用" but doesn't address:
-
-- What image does the shared VM use? Same Ubuntu 24.04 as current?
-- How is `arigd` installed inside it? Baked into the image? Provisioned on first boot?
-- How does the shared VM get updated when `arig` is updated?
-- What happens if the shared VM's state drifts or corrupts?
-
-This is the macOS-specific complexity that will eat your schedule if not designed upfront.
-
-### 6. Port forwarding implementation strategy is missing
-
-The design says what port forwarding should do, but not how. On Linux, the options are:
-
-- `socat` / `ssh -L` per mapping (simple, process-per-port)
-- `iptables` / `nftables` DNAT rules (efficient, requires CAP_NET_ADMIN)
-- Userspace proxy in `arigd` (most control, most code)
-
-On macOS, the "double-hop" relay adds another layer. **Recommendation:** Pick the mechanism now. Suggestion: userspace proxy (Go's `io.Copy` pattern or Node's `net.createConnection` pipe) for portability and debuggability, with no kernel privilege requirements.
+Suggestions also adopted: cache key now includes script hash + runtime version (PR-09), logging starts at PR-01, `runtime.gc` in API.
 
 ---
 
-## Design Suggestions
+## New Issues (Round 2)
 
-### 7. Consider skipping the shared VM on Apple Silicon with native containers
+### 1. `arigd` binary distribution model is unspecified
 
-Apple's Virtualization.framework and the emerging container runtimes (e.g., `colima` with VZ backend, or even Docker Desktop's managed VM) mean the shared VM approach may be obsolete before you ship. At minimum, design the `RuntimeDriver` interface so a future `macos-native` driver can slot in without touching commands.
+**Severity: High**
 
-### 8. The `tools` hash-cache model needs a cache invalidation story
+The project compiles to a Bun binary. Is `arigd` the same binary invoked differently (e.g., `arig daemon start` forks itself), or a separate compiled binary? This matters critically for macOS where `arigd` must be deployed *inside* the shared VM. If it's the same binary, a Linux-compiled version must be pushed into the VM. If separate, a second build target is needed.
 
-The plan says "根据工具集合计算 hash，命中缓存即复用." But what invalidates the cache when:
+**Recommendation:** Add a "Binary & Packaging" subsection to the arigd doc specifying: same binary with subcommand mode, cross-compiled for VM deployment, and the mechanism for pushing the binary into the shared VM on updates.
 
-- A tool's install script changes (same name, new version)?
-- The base image / provision script changes?
-- A security patch needs to propagate?
+### 2. Interactive operations (exec/attach) don't fit JSON-RPC
 
-**Recommendation:** Include the provision script version and tool installer content hash in the cache key, not just the tool name list.
+**Severity: High**
 
-### 9. Missing: resource cleanup and garbage collection
+The API lists `sandbox.exec` as a JSON-RPC method, but exec is a streaming/interactive operation (stdin/stdout/stderr). JSON-RPC 2.0 is request/response — it has no native streaming. Similarly, `attach` (tmux) is fundamentally a PTY session, not an RPC call.
 
-With per-sandbox users, each sandbox leaves behind:
+Options:
+- `sandbox.exec` via JSON-RPC returns a PTY path or port, and the CLI connects directly.
+- exec/attach bypass `arigd` entirely (CLI runs `su - arig_sb_<id>` via root helper or SSH).
+- Add a streaming sidecar protocol alongside JSON-RPC.
 
-- A Linux user account
-- A `~/.local/share/docker` directory (potentially gigabytes of images/layers)
-- cgroup slices
-- Port forwarding processes
+**Recommendation:** Clarify in the arigd doc whether exec/attach go through the daemon at all, or if they are direct-path operations that bypass `arigd`. This affects the core API contract and must be decided before PR-05.
 
-`destroy` needs to clean all of this up. The plan mentions `destroySandbox()` in the interface but doesn't detail the cleanup sequence. Leaked resources will accumulate fast in a system that creates/destroys sandboxes frequently.
+### 3. PR-03 and PR-05 are oversized
 
-### 10. Missing: observability and debugging
+**Severity: Medium**
 
-The plan mentions "审计日志" and "诊断命令" only in PR-10 (the last PR). In practice, you'll need logging from day one to debug the rootless Docker and port forwarding work in PR-04/PR-05. **Recommendation:** Add structured logging to `arigd` / the runtime layer in PR-01, not PR-10.
+PR-03 includes: daemon entry point + JSON-RPC protocol + SQLite state layer + reconcile framework — 4 distinct subsystems. PR-05 includes: Linux rootless driver + 4 linux/* submodules + migrating 6 commands. Both will exceed the "每个 PR 控制净改动规模" guidance from Section 7.
+
+**Recommendation:** Split PR-03 into:
+- PR-03a: daemon skeleton + protocol + client (can ping/version)
+- PR-03b: SQLite state layer + reconcile framework
+
+Split PR-05 into:
+- PR-05a: Linux rootless driver (create/destroy lifecycle only)
+- PR-05b: start/stop/exec/attach + command migration wave 2
+
+### 4. Transport abstraction for macOS is missing from the client design
+
+**Severity: Medium**
+
+`daemon-client.ts` needs to handle two transports:
+- Linux: direct Unix socket connection
+- macOS: SSH-tunneled or vsock connection to VM-internal socket
+
+This isn't called out. The client should have a `DaemonTransport` interface from day one (PR-03), not retrofitted in PR-08. Otherwise PR-08 will require rewriting the client.
+
+**Recommendation:** Define a `DaemonTransport` interface in PR-03 with a `LocalSocketTransport` implementation. PR-08 adds `SSHTransport` / `VsockTransport`. This is a small upfront cost that prevents a painful retrofit.
+
+### 5. Legacy driver story has a gap between the two docs
+
+**Severity: Medium**
+
+The design doc removed `legacy-lima` from the driver enum and code module list. But the PR plan still references legacy compatibility (PR-05: "核心命令均走 runtime 抽象"). There is no PR that wraps the existing Lima path behind `RuntimeDriver`. This means:
+
+- Existing sandboxes created with Lima cannot be managed after the migration, or
+- There is an implicit assumption that users destroy and recreate.
+
+**Recommendation:** Either add a `legacy-lima` driver in PR-01 (wrap existing `lima.ts` behind `RuntimeDriver` for backward compat), or explicitly state in the design doc that migration is destructive and existing sandboxes must be recreated. The current silence on this will confuse implementers.
+
+### 6. Destroy cleanup sequence needs definition
+
+**Severity: Medium**
+
+`sandbox.destroy` must clean up in order: stop proxy listeners, stop dockerd-rootless, kill user processes, remove workspace, delete user account (via root helper), remove cgroup slice, purge state.db entries. Partial failure at any step leaves orphaned resources. The arigd doc mentions reconcile for port bindings but not for destroy.
+
+**Recommendation:** Add a "Destroy Sequence & Partial Failure" subsection to the arigd doc with explicit step ordering and rollback/retry behavior per step.
 
 ---
 
-## PR Plan Sequencing Feedback
+## Minor Notes
+
+- The design doc Section 9 (代码落地建议) no longer lists `src/daemon/*` files — it is out of sync with the arigd doc Section 11. Consider either removing Section 9 from the design doc (since the arigd doc covers it) or keeping them aligned.
+- Consider adding periodic reconcile (e.g., every 60s) in addition to startup reconcile, to catch drift during long-running sessions.
+- The `arig setup` flow should detect if it has already been run and be idempotent — worth noting in PR-04 acceptance criteria.
+- The design doc Section 10 (实施路线) step 5 says "下线 core/template VM 模板路径" but no PR covers this deprecation. Either add it to PR-10 scope or remove the claim.
+
+---
+
+## Updated PR Assessment
 
 | PR | Assessment |
 |----|-----------|
-| PR-01 | Good starting point. Expand scope to migrate more commands through the abstraction. |
+| PR-01 | Good. Clarify whether a legacy-lima driver wrapper is included. |
 | PR-02 | Clean and low-risk. Fine as-is. |
-| PR-03 | Fine, but ensure `ports.ts` validation logic is thoroughly tested — it's reused everywhere. |
-| PR-04 | Needs `arigd` / privilege model resolved first. Highest technical risk. |
-| PR-05 | Depends on forwarding mechanism choice. Specify it before coding. |
-| PR-06 | Second highest risk. Needs shared VM bootstrap design. |
-| PR-07 | Straightforward if PR-05 and PR-06 are solid. |
-| PR-08 | Should not exist as a separate PR. Distribute into earlier PRs. |
-| PR-09 | Low risk, can be parallelized with PR-06/07. |
-| PR-10 | Fine for GA, but pull logging into PR-01. |
+| PR-03 | Oversized — consider splitting into skeleton + state/reconcile. Add `DaemonTransport` interface. |
+| PR-04 | Good. Add idempotency requirement for `arig setup`. |
+| PR-05 | Oversized — consider splitting into lifecycle + command migration. Needs exec/attach transport decision first. |
+| PR-06 | Good. Well-scoped. |
+| PR-07 | Good. Needs binary deployment mechanism decided (see issue #1). |
+| PR-08 | Good. Needs `DaemonTransport` from PR-03 to avoid client rewrite. |
+| PR-09 | Good. Well-scoped. |
+| PR-10 | Add legacy deprecation story if not covered elsewhere. |
 
 ---
 
 ## Summary
 
-**Strengths:**
-- Correct diagnosis of current architecture's problems
-- Clean separation of control plane (`arig`) and data plane (`arigd`)
-- Per-sandbox isolation model is sound
-- Phased rollout with rollback strategies per PR
-- Legacy compatibility is well-considered
+The updated plan is significantly stronger than round 1. The `arigd` design doc fills the biggest gap. The front-loaded architecture decisions (Section 2 of PR plan) and wave-based command migration are the right calls.
 
-**Gaps to close before coding:**
-1. Fully design `arigd` — API, lifecycle, supervision, crash recovery
-2. Resolve the privilege model for user creation on Linux
-3. Pick the port forwarding mechanism
-4. Design the shared VM bootstrap and update story for macOS
-5. Eliminate PR-08 by distributing command migration across earlier PRs
-6. Add structured logging from PR-01, not PR-10
+**Remaining items to resolve before coding:**
 
-The bones are right. The risk is in the under-specified runtime layer — `arigd` is doing the heavy lifting but has no spec. Nail that down and the rest follows.
+1. **Binary packaging model** — how `arigd` is built, distributed, and deployed into the macOS shared VM.
+2. **exec/attach transport** — whether these interactive operations go through JSON-RPC, bypass the daemon, or use a sidecar protocol.
+3. **Legacy sandbox migration** — explicit decision on backward compatibility vs. destructive migration.
+4. **PR-03 / PR-05 sizing** — split to stay within manageable review scope.
+5. **Destroy cleanup sequence** — ordered steps with partial-failure handling.
+6. **`DaemonTransport` interface** — design for multi-transport from day one.
+
+None of these are architectural blockers — they are specification gaps that can be closed with targeted additions to the arigd doc. The overall architecture is sound and ready for implementation once these are addressed.
