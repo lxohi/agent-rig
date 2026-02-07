@@ -34,6 +34,20 @@
 - 单个 shared VM 内运行 `arigd`（Linux 进程）与受限 helper。
 - Host 通过 SSH 控制通道访问 VM 内 `arigd` socket（可替换为 vsock）。
 
+## 2.3 二进制与发布模型
+
+- `arig` 与 `arigd` 使用同一个可执行文件，运行模式不同：
+  - CLI 模式：`arig <command>`
+  - Daemon 模式：`arig daemon serve`
+- release 构建产物同时包含 host 与 Linux 目标：
+  - host: `arig-darwin-*` / `arig-linux-*`
+  - shared VM: `arig-linux-x64` 或 `arig-linux-arm64`
+- macOS `runtime init/upgrade` 负责把 Linux 目标二进制推送到 shared VM：
+  - 上传到临时路径并校验 checksum
+  - 原子替换 `/usr/local/bin/arig`
+  - `systemctl restart arigd.service`
+- VM 内 systemd 单元统一执行 `arig daemon serve`，不引入第二套独立二进制发布链路。
+
 ## 3. 进程生命周期与监督
 
 ## 3.1 Linux
@@ -85,10 +99,22 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 
 ## 5. API 设计
 
-传输层：
+控制通道：
 
 - Unix domain socket（Linux: `~/.agent-rig/run/arigd.sock`; VM: `/run/arig/arigd.sock`）
 - JSON-RPC 2.0（请求/响应可追踪、易扩展、可复用 idempotency key）
+
+客户端传输抽象（从首版即引入）：
+
+```ts
+interface DaemonTransport {
+  request(req: JsonRpcRequest): Promise<JsonRpcResponse>;
+  openStream(endpoint: StreamEndpoint): Promise<Duplex>;
+}
+```
+
+- Linux：`LocalSocketTransport`
+- macOS(shared VM)：`SSHTransport`（后续可扩展 `VsockTransport`）
 
 核心方法（首版）：
 
@@ -98,7 +124,9 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 - `sandbox.start`
 - `sandbox.stop`
 - `sandbox.destroy`
-- `sandbox.exec`
+- `sandbox.exec.run`（非交互）
+- `sandbox.exec.startSession`（交互）
+- `sandbox.attach.startSession`（交互）
 - `sandbox.inspect`
 - `port.add`
 - `port.remove`
@@ -109,6 +137,20 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 
 - 所有写操作支持 `requestId`（幂等键）。
 - 超时、取消、重试语义明确（客户端指数退避）。
+
+## 5.1 交互操作（exec/attach）数据通道
+
+`exec/attach` 不走 JSON-RPC 流式传输。约定如下：
+
+1. CLI 先发 JSON-RPC 控制请求（`sandbox.exec.startSession` 或 `sandbox.attach.startSession`）。
+2. `arigd` 创建 PTY，会返回 `sessionId` 与 `StreamEndpoint`。
+3. CLI 通过 `DaemonTransport.openStream()` 连接该 endpoint，进入原始字节流模式。
+4. 会话结束后，CLI 上报退出码并由 daemon 做资源回收。
+
+补充：
+
+- 非交互命令使用 `sandbox.exec.run`，返回 `exitCode/stdout/stderr`（有大小上限）。
+- 超出上限或需要 TTY 时，CLI 自动切换到 session 模式。
 
 ## 6. 状态管理与崩溃恢复
 
@@ -133,6 +175,12 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
   - 缺失 listener -> 补建
   - 孤儿 listener -> 清理
   - 失败项 -> 标记 `error` 并写 `lastError`
+
+周期性 reconcile：
+
+- 启动后立即执行一次。
+- 运行期每 60s 执行一次轻量 reconcile（可配置）。
+- 关键事件后触发增量 reconcile（daemon crash、port apply 失败、runtime upgrade）。
 
 ## 7. 端口映射实现（已决策）
 
@@ -162,9 +210,9 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 
 ## 8.2 版本升级
 
-- `arig` 与 `arigd` 维护最小兼容矩阵：
-  - CLI 向后兼容 `N-1` 的 `arigd`。
-  - 不兼容时提示执行 `arig runtime upgrade`。
+- `arig` 与 VM 内 `arigd` 维护最小兼容矩阵：
+  - CLI 向后兼容 `N-1` 的 daemon 协议。
+  - 不兼容时提示执行 `arig runtime upgrade` 并阻止高风险写操作。
 
 ## 8.3 漂移与损坏恢复
 
@@ -196,24 +244,47 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 - `arig runtime status`
 - `arig runtime logs --tail 200`
 
-## 10. 失败模式与处理
+## 10. Destroy 序列与部分失败处理
+
+`sandbox.destroy` 固定执行顺序：
+
+1. 锁定 sandbox（阻止并发 start/exec/port 操作）。
+2. 停止并移除端口 listener/proxy。
+3. 停止 rootless dockerd。
+4. 结束 sandbox 用户进程（tmux/agent/孤儿子进程）。
+5. 删除 workspace 与用户态 Docker 数据目录（按配置可保留快照）。
+6. 通过 root helper 删除 sandbox 用户与相关 slice。
+7. 清理 `state.db` 运行态记录。
+8. 释放锁并写入最终审计事件。
+
+部分失败策略：
+
+- 每步单独记录 `stepStatus` 与 `lastError`。
+- 可重试步骤（2/3/4/7）自动重试并带指数退避。
+- 不可重试步骤（6）失败时标记 `destroy_degraded`，由 `runtime.gc` 补偿清理。
+- destroy 对调用方返回“成功/部分成功/失败”三态，避免静默失败。
+
+## 11. 失败模式与处理
 
 - socket 不可连：自动拉起服务，失败则输出启动路径诊断。
 - root helper 权限失败：明确提示执行 `arig setup`。
 - 端口占用：`port.add` 返回冲突，不污染 active 状态。
 - daemon 崩溃：标记 sandbox `degraded`，自动重试重启（限次）。
 - shared VM 不可达：返回 platform-specific 建议（启动/修复）。
+- destroy 中断：进入 `destroy_degraded`，`runtime.gc` 周期补偿。
 
-## 11. 与现有代码的映射
+## 12. 与现有代码的映射
 
 建议新增：
 
 - `src/lib/runtime/daemon-client.ts`（CLI 到 arigd 的 RPC 客户端）
 - `src/lib/runtime/daemon-protocol.ts`（请求/响应类型）
+- `src/lib/runtime/transports/*`（`DaemonTransport` 及实现）
 - `src/daemon/arigd.ts`（服务入口）
 - `src/daemon/services/*`（sandbox/ports/runtime 逻辑）
 - `src/daemon/store/*`（SQLite 状态层）
 - `src/daemon/root-helper-client.ts`
+- `src/daemon/session/*`（PTY session 管理）
 
 建议改造：
 
@@ -226,10 +297,12 @@ rootless-per-sandbox 的业务进程是 rootless，但“创建/删除 Linux 用
 - `src/commands/info.tsx`
 - `src/commands/port.tsx`（新增）
 
-## 12. 验收标准
+## 13. 验收标准
 
 - `arigd` 可在 Linux 独立启动、被 CLI 发现并调用。
 - root helper 权限路径可控且可审计。
 - 端口映射支持“已存在 sandbox 在线追加”。
 - `arigd` 崩溃重启后可恢复运行态并与配置态一致。
 - macOS shared VM 内 `arigd` 可升级与修复。
+- `exec/attach` 可通过 session 通道稳定交互。
+- destroy 支持部分失败可恢复，不遗留长期孤儿资源。

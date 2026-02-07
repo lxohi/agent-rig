@@ -17,6 +17,7 @@
 - 支持 macOS + Linux，且 Linux 不依赖嵌套虚拟化。
 - 支持 Docker/Compose，允许 agent 拉起依赖容器和项目容器。
 - 新增端口映射能力，要求已存在 sandbox 可追加端口映射。
+- 提供明确升级策略：新架构切换为破坏式迁移，旧 VM sandbox 需重建。
 
 ## 2. 总体架构
 
@@ -176,6 +177,11 @@ lastError: ""
 - `src/lib/runtime/macos-sharedvm.ts`
 - `src/lib/ports.ts`
 - `src/commands/port.tsx`
+- `src/daemon/arigd.ts`
+- `src/daemon/services/*`
+- `src/daemon/store/*`
+- `src/lib/runtime/daemon-client.ts`
+- `src/lib/runtime/transports/*`
 
 改造模块：
 
@@ -186,6 +192,8 @@ lastError: ""
 - `src/commands/stop.tsx`：优雅回收转发进程。
 - `src/commands/info.tsx`：展示端口映射状态。
 - `src/index.tsx`：注册 `port` 子命令。
+- `src/commands/exec.tsx`：改为 session 模式（非 JSON-RPC 流）。
+- `src/commands/attach.tsx`：改为 session 模式（非 JSON-RPC 流）。
 
 ## 10. 实施路线
 
@@ -194,6 +202,7 @@ lastError: ""
 3. 上线 macOS `shared VM` + `rootless-per-sandbox`。
 4. 上线 `port` 子命令与 create 时 `--port`。
 5. 下线 `core/template` VM 模板路径，统一到 runtime 模型。
+6. 发布升级指南并执行破坏式迁移：备份后重建 sandbox。
 
 ## 11. 安全与运维要点
 
