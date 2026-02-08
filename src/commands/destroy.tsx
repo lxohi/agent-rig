@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { sandboxExists, deleteSandboxConfig } from '../lib/sandbox.js';
-import { limaDelete, getSandboxVMName } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
 import { StatusLine } from '../components/StatusLine.js';
 import { Spinner } from '../components/Spinner.js';
 
@@ -16,8 +16,8 @@ export async function destroyCommand(name: string): Promise<void> {
   );
 
   try {
-    const vmName = getSandboxVMName(name);
-    await limaDelete(vmName);
+    const runtime = createRuntime();
+    await runtime.destroy(name);
     await deleteSandboxConfig(name);
     unmount();
     render(<StatusLine status="success" message={`Destroyed sandbox "${name}"`} />);

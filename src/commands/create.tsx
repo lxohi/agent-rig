@@ -5,9 +5,11 @@ import { loadConfig } from '../lib/config.js';
 import { loadPresets, getPreset } from '../lib/presets.js';
 import {
   computePackageHash,
+  computePackageHashV2,
   loadTemplateIndex,
   saveTemplateIndex,
   findTemplateByHash,
+  findValidTemplate,
   addTemplate,
   updateTemplateUsage,
 } from '../lib/template.js';
@@ -20,10 +22,12 @@ import {
   limaCreate,
   getSandboxVMName,
   getTemplateVMName,
-  limaList,
   buildLimaConfig,
 } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
 import { PROVISION_SCRIPT } from '../lib/provision-script.js';
+import { resolveAliases } from '../lib/tool-aliases.js';
+import { VERSION } from '../version.js';
 import { stringify as stringifyYaml } from 'yaml';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -235,6 +239,9 @@ export async function createCommand(
     packages = options.packages.split(',').map((p) => p.trim());
   }
 
+  // Resolve aliases (e.g. node22 → node-22, jvm17 → java-17)
+  packages = resolveAliases(packages);
+
   // Determine repo (track if detected)
   const detectedRepo = !options.repo ? await detectGitRepo() : undefined;
   const repo = options.repo || detectedRepo;
@@ -314,6 +321,7 @@ export async function createCommand(
     }
   };
 
+  const runtime = createRuntime();
   const { rerender, unmount } = render(<CreateUI tasks={tasks} />);
 
   try {
@@ -321,9 +329,9 @@ export async function createCommand(
     updateTask('running');
     rerender(<CreateUI tasks={tasks} />);
 
-    const vms = await limaList();
+    const allSandboxes = await runtime.list();
     const coreVMName = getTemplateVMName('');
-    if (!vms.some((vm) => vm.name === coreVMName)) {
+    if (!allSandboxes.some((s) => s.name === coreVMName)) {
       // Auto-build core template
       const limaConfig = buildLimaConfig({
         name: coreVMName,
@@ -345,7 +353,8 @@ export async function createCommand(
     rerender(<CreateUI tasks={tasks} />);
 
     // Step 2: Prepare template (find or create)
-    const packageHash = computePackageHash(packages);
+    const packageHash = computePackageHashV2(packages);
+    const packageHashLegacy = computePackageHash(packages);
     let templateIndex = await loadTemplateIndex();
     let templateVMName: string;
 
@@ -353,10 +362,13 @@ export async function createCommand(
       // Use core template directly
       templateVMName = coreVMName;
     } else {
-      const existingTemplate = findTemplateByHash(templateIndex, packageHash);
+      // Try v2 match first, then fall back to legacy hash
+      const existingTemplate =
+        findTemplateByHash(templateIndex, packageHash) ??
+        findTemplateByHash(templateIndex, packageHashLegacy);
       if (existingTemplate) {
-        templateVMName = getTemplateVMName(packageHash);
-        templateIndex = updateTemplateUsage(templateIndex, packageHash);
+        templateVMName = getTemplateVMName(existingTemplate.hash);
+        templateIndex = updateTemplateUsage(templateIndex, existingTemplate.hash);
         await saveTemplateIndex(templateIndex);
       } else {
         // Create new template from core
@@ -369,11 +381,7 @@ export async function createCommand(
         for (const pkg of packages) {
           const misePackage = toMisePackage(pkg);
           await limaExec(templateVMName, [
-            'sudo',
-            '-u',
-            'agent_dev',
-            'bash',
-            '-c',
+            'sudo', '-u', 'agent_dev', 'bash', '-c',
             `source ~/.bashrc && ~/.local/bin/mise use --global ${misePackage}`,
           ]);
         }
@@ -388,6 +396,8 @@ export async function createCommand(
           created: new Date().toISOString(),
           lastUsed: new Date().toISOString(),
           usageCount: 1,
+          scriptHash: packageHash,
+          runtimeVersion: VERSION,
         });
         await saveTemplateIndex(templateIndex);
       }
@@ -402,14 +412,12 @@ export async function createCommand(
     rerender(<CreateUI tasks={tasks} />);
 
     // Step 4: Configure sandbox
-    await limaStart(sandboxVMName);
+    await runtime.start(name);
 
     // Configure git credentials (askpass script)
     if (options.gitUser && options.gitToken) {
-      await limaExec(sandboxVMName, [
-        'sudo',
-        'bash',
-        '-c',
+      await runtime.execRun(name, [
+        'sudo', 'bash', '-c',
         `cat > /home/agent_dev/bin/git-askpass.sh << 'ASKPASS'
 #!/bin/bash
 case "$1" in
@@ -422,10 +430,8 @@ chown agent_dev:agent_dev /home/agent_dev/bin/git-askpass.sh`,
       ]);
 
       // Configure git environment
-      await limaExec(sandboxVMName, [
-        'sudo',
-        'bash',
-        '-c',
+      await runtime.execRun(name, [
+        'sudo', 'bash', '-c',
         `cat > /home/agent_dev/.bashrc.d/git.sh << 'GITENV'
 export GIT_ASKPASS=$HOME/bin/git-askpass.sh
 export GIT_TERMINAL_PROMPT=0
@@ -436,27 +442,15 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/git.sh`,
 
     // Configure git author
     if (gitName) {
-      await limaExec(sandboxVMName, [
-        'sudo',
-        '-u',
-        'agent_dev',
-        'git',
-        'config',
-        '--global',
-        'user.name',
-        gitName,
+      await runtime.execRun(name, [
+        'sudo', '-u', 'agent_dev',
+        'git', 'config', '--global', 'user.name', gitName,
       ]);
     }
     if (gitEmail) {
-      await limaExec(sandboxVMName, [
-        'sudo',
-        '-u',
-        'agent_dev',
-        'git',
-        'config',
-        '--global',
-        'user.email',
-        gitEmail,
+      await runtime.execRun(name, [
+        'sudo', '-u', 'agent_dev',
+        'git', 'config', '--global', 'user.email', gitEmail,
       ]);
     }
 
@@ -468,10 +462,8 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/git.sh`,
         authToken ? `export ANTHROPIC_AUTH_TOKEN="${authToken}"` : '',
       ].filter(Boolean).join('\n');
 
-      await limaExec(sandboxVMName, [
-        'sudo',
-        'bash',
-        '-c',
+      await runtime.execRun(name, [
+        'sudo', 'bash', '-c',
         `cat > /home/agent_dev/.bashrc.d/claude.sh << 'CLAUDEENV'
 ${claudeEnv}
 CLAUDEENV
@@ -485,22 +477,16 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/claude.sh`,
     const cloneEnv = options.gitUser && options.gitToken
       ? 'export GIT_ASKPASS=$HOME/bin/git-askpass.sh; export GIT_TERMINAL_PROMPT=0; '
       : '';
-    await limaExec(sandboxVMName, [
-      'sudo',
-      '-u',
-      'agent_dev',
-      'bash',
-      '-c',
+    await runtime.execRun(name, [
+      'sudo', '-u', 'agent_dev', 'bash', '-c',
       `${cloneEnv}cd ~/workspace && git clone ${repo} .`,
     ]);
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
     // Step 6: Start Claude Code
-    await limaExec(sandboxVMName, [
-      'sudo',
-      '-u',
-      'agent_dev',
+    await runtime.execRun(name, [
+      'sudo', '-u', 'agent_dev',
       '/home/agent_dev/bin/start-claude.sh',
     ]);
     nextTask();

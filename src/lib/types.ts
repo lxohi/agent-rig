@@ -27,6 +27,24 @@ export interface Config {
   git: GitConfig;
 }
 
+export interface PortMapping {
+  id: string;
+  hostPort: number;
+  targetPort: number;
+  protocol: 'tcp' | 'udp';
+  bindAddress: string;
+  status: 'active' | 'pending' | 'error';
+  createdAt: string;
+  lastError?: string;
+}
+
+export interface SandboxRuntime {
+  driver: 'linux-rootless' | 'macos-sharedvm-rootless';
+  sandboxId: string;
+  sandboxUser: string;
+  stateVersion: string;
+}
+
 export interface SandboxConfig {
   name: string;
   repo: string;
@@ -42,6 +60,9 @@ export interface SandboxConfig {
   };
   claude?: ClaudeConfig;
   created: string;
+  runtime?: SandboxRuntime;
+  tools?: string[];
+  ports?: PortMapping[];
 }
 
 export interface TemplateEntry {
@@ -51,6 +72,8 @@ export interface TemplateEntry {
   created: string;
   lastUsed: string;
   usageCount: number;
+  scriptHash?: string;
+  runtimeVersion?: string;
 }
 
 export interface TemplateIndex {

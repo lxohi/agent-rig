@@ -1,0 +1,8 @@
+name: "node-22"
+version: "1.0.0"
+description: "Node.js 22 LTS"
+
+provides:
+  node: "22"
+
+conflicts: []

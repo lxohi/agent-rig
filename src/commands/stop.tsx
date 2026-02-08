@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
 import { sandboxExists } from '../lib/sandbox.js';
-import { limaStop, limaList, getSandboxVMName } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
 import { StatusLine } from '../components/StatusLine.js';
 import { Spinner } from '../components/Spinner.js';
 
@@ -11,11 +11,10 @@ export async function stopCommand(name: string): Promise<void> {
     process.exit(1);
   }
 
-  const vmName = getSandboxVMName(name);
-  const vms = await limaList();
-  const vm = vms.find((v) => v.name === vmName);
+  const runtime = createRuntime();
+  const info = await runtime.inspect(name);
 
-  if (vm?.status !== 'Running') {
+  if (info?.state !== 'running') {
     render(<StatusLine status="info" message={`Sandbox "${name}" is already stopped`} />);
     return;
   }
@@ -25,7 +24,7 @@ export async function stopCommand(name: string): Promise<void> {
   );
 
   try {
-    await limaStop(vmName);
+    await runtime.stop(name);
     unmount();
     render(<StatusLine status="success" message={`Stopped sandbox "${name}"`} />);
   } catch (error) {

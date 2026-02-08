@@ -1,8 +1,7 @@
 import React from 'react';
 import { render } from 'ink';
-import { execa } from 'execa';
 import { sandboxExists } from '../lib/sandbox.js';
-import { limaList, limaStart, getSandboxVMName } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
 import { StatusLine } from '../components/StatusLine.js';
 import { Spinner } from '../components/Spinner.js';
 
@@ -12,24 +11,19 @@ export async function execCommand(name: string, cmd: string[]): Promise<void> {
     process.exit(1);
   }
 
-  const vmName = getSandboxVMName(name);
-  const vms = await limaList();
-  const vm = vms.find((v) => v.name === vmName);
+  const runtime = createRuntime();
+  const info = await runtime.inspect(name);
 
   // Auto-start if stopped
-  if (vm?.status !== 'Running') {
+  if (info?.state !== 'running') {
     const { unmount } = render(<Spinner message="Starting sandbox..." />);
-    await limaStart(vmName);
+    await runtime.start(name);
     unmount();
   }
 
-  // Execute command as agent_dev
-  const { stdout, stderr } = await execa(
-    'limactl',
-    ['shell', vmName, '--', 'sudo', '-u', 'agent_dev', 'bash', '-c', cmd.join(' ')],
-    { reject: false }
-  );
+  // Execute command via runtime driver
+  const result = await runtime.execRun(name, cmd);
 
-  if (stdout) console.log(stdout);
-  if (stderr) console.error(stderr);
+  if (result.stdout) console.log(result.stdout);
+  if (result.stderr) console.error(result.stderr);
 }

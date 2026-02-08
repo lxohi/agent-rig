@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { TemplateIndex, TemplateEntry } from './types.js';
 import { getConfigDir } from './config.js';
+import { computeCacheKey } from './tool-cache.js';
+import { VERSION } from '../version.js';
 
 export function computePackageHash(packages: string[]): string {
   if (packages.length === 0) return '';
@@ -64,4 +66,61 @@ export function updateTemplateUsage(
         : t
     ),
   };
+}
+
+/**
+ * Compute a v2 cache key for packages using script hashes + runtime version.
+ * Falls back to v1 (package-name-only) hash when called with no version override.
+ */
+export function computePackageHashV2(packages: string[]): string {
+  return computeCacheKey({ packages });
+}
+
+/**
+ * Check if a cached template is stale.
+ * A template is stale when:
+ * - Its scriptHash doesn't match the current computed cache key
+ * - Its runtimeVersion doesn't match the current CLI version
+ * - It has no scriptHash (v1 template, needs rebuild)
+ */
+export function isTemplateStale(entry: TemplateEntry): boolean {
+  if (!entry.scriptHash) return true;
+  const currentKey = computeCacheKey({ packages: entry.packages });
+  if (entry.scriptHash !== currentKey) return true;
+  if (entry.runtimeVersion && entry.runtimeVersion !== VERSION) return true;
+  return false;
+}
+
+/**
+ * Find a valid (non-stale) template for the given packages.
+ * Returns undefined if no matching template exists or all matches are stale.
+ */
+export function findValidTemplate(
+  index: TemplateIndex,
+  packages: string[]
+): TemplateEntry | undefined {
+  const cacheKey = computeCacheKey({ packages });
+  if (!cacheKey) return undefined;
+  return index.templates.find(
+    (t) => t.scriptHash === cacheKey && t.runtimeVersion === VERSION
+  );
+}
+
+/**
+ * Remove stale templates from the index.
+ * Returns the cleaned index and the list of removed entries.
+ */
+export function removeStaleTemplates(
+  index: TemplateIndex
+): { index: TemplateIndex; removed: TemplateEntry[] } {
+  const removed: TemplateEntry[] = [];
+  const kept: TemplateEntry[] = [];
+  for (const t of index.templates) {
+    if (isTemplateStale(t)) {
+      removed.push(t);
+    } else {
+      kept.push(t);
+    }
+  }
+  return { index: { templates: kept }, removed };
 }
