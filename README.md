@@ -42,7 +42,7 @@ This installs to `~/.arig/` and adds `~/.arig/bin` to PATH.
 ## Updating
 
 - npm install: upgrade with `npm install -g agent-rig@latest`.
-- Binary install (`~/.arig`): use `arig update` (auto-update state is managed there).
+- Binary install (`~/.arig`): use `arig update` (updates CLI in `~/.arig`; user data in `~/.agent-rig` is preserved).
 
 ## Quick Start
 
@@ -193,6 +193,7 @@ arig runtime status
 
 - [Architecture](docs/ARCHITECTURE.md) - Internal design and structure
 - [Migration (npm install)](docs/MIGRATION-NPM.md) - Upgrade path for npm-installed users
+- [Migration (binary install)](docs/MIGRATION-BINARY.md) - Upgrade path for install.sh users and data-directory handling
 
 ## Development
 

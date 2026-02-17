@@ -80,7 +80,27 @@ arig runtime init
 arig runtime status
 ```
 
-## 5. Existing sandboxes and config compatibility
+## 5. Where data lives (and what npm upgrade does)
+
+`npm install -g agent-rig@latest` only replaces the CLI package.
+It does **not** delete sandbox/config/runtime data under `~/.agent-rig`.
+
+| Path | Purpose | Upgrade behavior |
+| --- | --- | --- |
+| `~/.agent-rig/config.yml` | Global config | Preserved |
+| `~/.agent-rig/sandboxes/*/config.yml` | Per-sandbox config | Preserved |
+| `~/.agent-rig/templates/index.yml` | Template cache index | Preserved |
+| `~/.agent-rig/tool-cache/index.yml` | Tool cache index | Preserved |
+| `~/.agent-rig/runtime/state.db` | Runtime state DB | Preserved |
+| `~/.agent-rig/run/*` | Runtime sockets/session files | Recreated as needed |
+| `~/.lima/*` | Lima VM disks/state | Preserved |
+
+Note for users who also used the binary installer:
+
+- `~/.arig` is only for binary-install CLI/update state.
+- npm upgrade does not touch `~/.arig`.
+
+## 6. Existing sandboxes and config compatibility
 
 - Existing sandbox configs under `~/.agent-rig/sandboxes/*/config.yml` remain readable.
 - Missing new fields are defaulted automatically.
@@ -92,7 +112,29 @@ Recommended safety backup before large changes:
 cp -a ~/.agent-rig ~/.agent-rig.backup.$(date +%Y%m%d-%H%M%S)
 ```
 
-## 6. Command mapping (old -> new)
+## 7. Optional cleanup after successful migration
+
+Only do this if you intentionally want to clean stale runtime/temp state:
+
+```bash
+# 1) stop any running sandbox first
+arig list
+
+# 2) remove transient runtime sockets/sessions (safe, auto-recreated)
+rm -rf ~/.agent-rig/run
+
+# 3) if runtime state looks stale, reset state.db (it will be recreated)
+mv ~/.agent-rig/runtime/state.db ~/.agent-rig/runtime/state.db.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
+rm -f ~/.agent-rig/runtime/state.db-wal ~/.agent-rig/runtime/state.db-shm
+```
+
+For template cache cleanup, prefer the built-in command:
+
+```bash
+arig template prune 5
+```
+
+## 8. Command mapping (old -> new)
 
 | Previous workflow | New workflow |
 | --- | --- |
@@ -103,7 +145,7 @@ cp -a ~/.agent-rig ~/.agent-rig.backup.$(date +%Y%m%d-%H%M%S)
 | N/A | `arig port add/remove/list` for port mapping management. |
 | N/A | `arig runtime status/upgrade/repair` for shared VM runtime operations. |
 
-## 7. Common issues
+## 9. Common issues
 
 - `arig` points to an old binary path:
   - Re-check `which -a arig`.
