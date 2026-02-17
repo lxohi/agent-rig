@@ -63,7 +63,7 @@ describe('LinuxRootlessDriver edge cases', () => {
 
   function mockGetentUser(username = 'arig_sb_test', uid = 10001) {
     vi.mocked(execa).mockResolvedValueOnce({
-      stdout: `${username}:x:${uid}:${uid}::\/home\/${username}:\/bin\/false`,
+      stdout: `${username}:x:${uid}:${uid}::/home/${username}:/bin/false`,
       stderr: '', exitCode: 0,
     } as any);
   }

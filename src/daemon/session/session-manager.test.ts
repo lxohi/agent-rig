@@ -3,8 +3,6 @@ import { SessionManager } from './session-manager.js';
 
 // Mock PtySession to avoid spawning real processes
 vi.mock('./pty-session.js', () => {
-  let sessionCounter = 0;
-
   class MockPtySession {
     readonly sessionId: string;
     readonly sandboxName: string;

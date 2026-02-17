@@ -56,7 +56,7 @@ export function openDatabase(path: string): SqliteDatabase {
 
 function openBunDatabase(path: string): SqliteDatabase {
   // Dynamic import to avoid Node parse errors — this path only runs in Bun
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { Database } = require('bun:sqlite');
   const db = new Database(path, { strict: true });
   db.run('PRAGMA journal_mode = WAL');
@@ -77,7 +77,7 @@ function openBunDatabase(path: string): SqliteDatabase {
 // ---------------------------------------------------------------------------
 
 function openBetterSqlite3Database(path: string): SqliteDatabase {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const Database = require('better-sqlite3');
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
