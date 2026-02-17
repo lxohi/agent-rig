@@ -1,86 +1,121 @@
 # agent-rig
 
-A CLI tool for creating isolated Lima VM development environments for coding agents.
+CLI tool for isolated development sandboxes for coding agents.
 
 ## Overview
 
-agent-rig (`arig`) manages sandboxed development environments using Lima VMs. Each sandbox is an isolated Ubuntu 24.04 VM with pre-configured tooling, designed for running coding agents like Claude Code in a safe, reproducible environment.
+agent-rig (`arig`) manages sandbox lifecycle, runtime operations, and package/preset setup.
 
-**Key Features:**
+This branch introduces a redesign and runtime refactor:
 
-- **Isolated VMs** - Each sandbox runs in its own Lima VM with configurable resources
-- **Template System** - Hash-based deduplication for efficient sandbox creation
-- **Presets** - Pre-configured package combinations for common development stacks
-- **Fast Cloning** - New sandboxes clone from cached templates instead of rebuilding
+- Runtime driver abstraction for sandbox operations.
+- New operational commands: `setup`, `diagnose`, `port`, and `runtime`.
+- `template build` deprecation path for the new runtime-oriented architecture.
+- Backward-compatible sandbox config loading for new fields (`runtime`, `tools`, `ports`).
+
+Current default runtime remains Lima-based, while shared-VM/rootless runtime flows are now available through runtime management commands.
 
 ## Installation
+
+### npm (global)
+
+```bash
+npm install -g agent-rig
+hash -r
+arig --version
+```
+
+### Binary installer
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/lxohi/agent-rig/main/install.sh | bash
 ```
 
-This will:
-1. Download the latest binary for your platform
-2. Install to `~/.arig/`
-3. Add `~/.arig/bin` to your PATH
+This installs to `~/.arig/` and adds `~/.arig/bin` to PATH.
 
-After installation, restart your shell or run `source ~/.zshrc` (or `~/.bashrc`).
+## Prerequisites
 
-**Prerequisites:**
-- macOS (Intel or Apple Silicon) or Linux (x64 or arm64)
-- [Lima](https://lima-vm.io/) - Install with `brew install lima`
+- macOS (Intel or Apple Silicon) or Linux (x64/arm64)
+- [Lima](https://lima-vm.io/) for current default runtime and macOS shared-VM runtime commands
+- Node.js `>=20` (npm install path)
 
-**Auto-updates:** arig checks for updates in the background and automatically updates on next launch.
+## Updating
+
+- npm install: upgrade with `npm install -g agent-rig@latest`.
+- Binary install (`~/.arig`): use `arig update` (auto-update state is managed there).
 
 ## Quick Start
 
 ```bash
-# 1. Build the core VM template (one-time setup)
-arig core build
-
-# 2. Create a sandbox for your project
+# 1. Create a sandbox (repo can be auto-detected from current git directory)
 arig create my-project --repo https://github.com/user/repo --preset fullstack-dev
 
-# 3. Attach to the Claude Code session
-arig attach my-project
+# 2. Check status and connect
+arig list
+arig info my-project
+arig ssh my-project
 
-# 4. When done, stop or destroy the sandbox
+# 3. Optional: add a port mapping
+arig port add my-project --host 18080 --target 8080
+arig port list my-project
+
+# 4. Stop or destroy when done
 arig stop my-project
 arig destroy my-project
 ```
 
-## Commands
+## Command Reference
 
-### Sandbox Lifecycle
-
-| Command | Description |
-|---------|-------------|
-| `arig create <name>` | Create a new sandbox |
-| `arig list` | List all sandboxes with status |
-| `arig info <name>` | Show detailed sandbox information |
-| `arig start <name>` | Start a stopped sandbox |
-| `arig stop <name>` | Stop a running sandbox |
-| `arig destroy <name>` | Permanently delete a sandbox |
-
-### Interaction
+### Sandbox lifecycle
 
 | Command | Description |
-|---------|-------------|
-| `arig attach <name>` | Attach to Claude Code tmux session |
-| `arig ssh <name>` | SSH into sandbox as agent_dev user |
-| `arig exec <name> <cmd...>` | Execute a command in the sandbox |
+| --- | --- |
+| `arig create <name>` | Create a sandbox |
+| `arig list` / `arig ls` | List sandboxes with status |
+| `arig info <name>` | Show sandbox details |
+| `arig start <name>` | Start a sandbox |
+| `arig stop <name>` | Stop a sandbox |
+| `arig destroy <name>` | Delete a sandbox |
 
-### Management
+### Sandbox access
 
 | Command | Description |
-|---------|-------------|
-| `arig core build` | Build/rebuild the core VM template |
-| `arig template list` | List cached templates |
-| `arig template prune [n]` | Keep only n most recent templates |
-| `arig preset list` | List available presets |
-| `arig preset create <name> <packages>` | Create a custom preset |
-| `arig preset delete <name>` | Delete a custom preset |
+| --- | --- |
+| `arig attach <name>` | Attach to sandbox primary interactive session |
+| `arig ssh <name>` | Open a shell as `agent_dev` |
+| `arig exec <name> <cmd...>` | Run a command in a sandbox |
+
+### Port management
+
+| Command | Description |
+| --- | --- |
+| `arig port add <sandbox> --host <p> --target <p>` | Add a port mapping |
+| `arig port remove <sandbox> --host <p>` | Remove a port mapping |
+| `arig port list <sandbox>` | List port mappings |
+
+### Runtime and operations
+
+| Command | Description |
+| --- | --- |
+| `arig diagnose` | Run system/runtime diagnostics |
+| `arig setup` | Install root-helper permissions (Linux; requires sudo) |
+| `arig runtime init` | Initialize shared VM runtime |
+| `arig runtime status` | Check shared VM runtime health |
+| `arig runtime upgrade --binary <path>` | Upgrade runtime binary in shared VM |
+| `arig runtime repair [--binary <path>]` | Repair shared VM runtime |
+| `arig update` | Check and download CLI update (binary-install flow) |
 | `arig completions install` | Install shell completions |
+
+### Template and presets
+
+| Command | Description |
+| --- | --- |
+| `arig template list` | List cached templates |
+| `arig template prune [n]` | Keep only `n` newest templates |
+| `arig template build` | Deprecated alias for rebuilding template/core path |
+| `arig preset list` | List presets |
+| `arig preset create <name> <packages>` | Create custom preset |
+| `arig preset delete <name>` | Delete custom preset |
 
 ## Create Options
 
@@ -88,83 +123,92 @@ arig destroy my-project
 arig create <name> [options]
 
 Options:
-  --repo <url>        Git repository URL (auto-detected if in git directory)
-  --preset <name>     Use a preset (e.g., fullstack-dev, python-ml, frontend)
-  --packages <list>   Comma-separated packages (e.g., node-20,python-312)
-  --cpus <n>          Number of CPU cores (default: 4)
-  --memory <size>     Memory size (default: 8G)
-  --disk <size>       Disk size (default: 30G)
-  --git-user <user>   Git username for authentication
-  --git-token <token> Git personal access token
+  --repo <url>          Git repository URL (auto-detected when possible)
+  --git-user <user>     Git username for authentication
+  --git-token <token>   Git personal access token
+  --git-name <name>     Git author name (auto-detected from git config)
+  --git-email <email>   Git author email (auto-detected from git config)
+  --base-url <url>      Anthropic API base URL
+  --auth-token <token>  Anthropic auth token
+  --preset <name>       Use a preset
+  --packages <list>     Comma-separated package list
+  --save-preset <name>  Save this package config as a preset
+  --cpus <n>            CPU cores
+  --memory <size>       Memory size
+  --disk <size>         Disk size
 ```
 
 ## Presets
 
-Built-in presets for common development stacks:
+Built-in presets:
 
 | Preset | Packages | Description |
-|--------|----------|-------------|
-| `fullstack-dev` | java-17, node-20 | Full stack development |
-| `python-ml` | python-312, uv | Python machine learning |
-| `frontend` | node-20 | Frontend development |
+| --- | --- | --- |
+| `fullstack-dev` | `java-17,node-20` | Full stack development with Java and Node |
+| `python-ml` | `python-312,uv` | Python machine learning development |
+| `frontend` | `node-20` | Frontend development |
 
-Create custom presets:
+Example:
 
 ```bash
-arig preset create my-stack "node-20,python-312,java-21"
+arig preset create my-stack "node-22,python-312,java-21"
 arig create my-project --preset my-stack --repo https://github.com/user/repo
 ```
 
 ## Available Packages
 
 | Package | Description |
-|---------|-------------|
+| --- | --- |
 | `java-17` | OpenJDK 17 |
 | `java-21` | OpenJDK 21 |
 | `node-20` | Node.js 20 LTS |
+| `node-22` | Node.js 22 |
 | `python-312` | Python 3.12 |
 | `uv` | Fast Python package installer |
 
-## Configuration
+Accepted package aliases in `--packages` include:
 
-Sandbox settings are specified via `create` options:
+- `node22` -> `node-22`
+- `node20` -> `node-20`
+- `jvm17` -> `java-17`
+- `jvm21` -> `java-21`
+- `python312` / `py312` -> `python-312`
+
+## Runtime Setup Notes
+
+- Linux root-helper setup (one-time):
 
 ```bash
-arig create my-project \
-  --repo https://github.com/user/repo \
-  --preset fullstack-dev \
-  --cpus 8 \
-  --memory 16G \
-  --disk 50G
+sudo arig setup
 ```
 
-Custom presets are managed via CLI:
+- macOS shared VM runtime setup (if using shared VM path):
 
 ```bash
-arig preset create my-stack "node-20,python-312"
-arig preset list
-arig preset delete my-stack
-```
-
-## Development
-
-```bash
-npm install      # Install dependencies
-npm run build    # Build
-npm test         # Run tests in watch mode
-npm run test:run # Run tests once
+arig runtime init
+arig runtime status
 ```
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) - Internal design, template system, and code structure
+- [Architecture](docs/ARCHITECTURE.md) - Internal design and structure
+- [Migration (npm install)](docs/MIGRATION-NPM.md) - Upgrade path for npm-installed users
+
+## Development
+
+```bash
+npm install
+npm run build
+npm test
+npm run test:run
+```
 
 ## Shell Completions
 
 ```bash
-arig completions install  # Auto-detect shell and install
-arig completions bash     # Output bash completions
-arig completions zsh      # Output zsh completions
+arig completions install
+arig completions bash
+arig completions zsh
 ```
 
 ## License
