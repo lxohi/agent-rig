@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, Text, Box } from 'ink';
 import { loadSandboxConfig, sandboxExists } from '../lib/sandbox.js';
-import { limaList, getSandboxVMName } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
 import { StatusLine } from '../components/StatusLine.js';
 
 function InfoOutput({
@@ -63,10 +63,9 @@ export async function infoCommand(name: string): Promise<void> {
   }
 
   const config = await loadSandboxConfig(name);
-  const vms = await limaList();
-  const vmName = getSandboxVMName(name);
-  const vm = vms.find((v) => v.name === vmName);
-  const status = vm?.status === 'Running' ? 'running' : 'stopped';
+  const runtime = createRuntime();
+  const info = await runtime.inspect(name);
+  const status = info?.state === 'running' ? 'running' : 'stopped';
 
   render(<InfoOutput config={config} status={status} />);
 }

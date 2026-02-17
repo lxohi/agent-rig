@@ -23,6 +23,15 @@ import {
   completionsInstallCommand,
 } from './commands/completions.js';
 import { updateCommand } from './commands/update.js';
+import { setupCommand } from './commands/setup.js';
+import { diagnoseCommand } from './commands/diagnose.js';
+import { portAddCommand, portRemoveCommand, portListCommand } from './commands/port.js';
+import {
+  runtimeInitCommand,
+  runtimeStatusCommand,
+  runtimeUpgradeCommand,
+  runtimeRepairCommand,
+} from './commands/runtime.js';
 import { VERSION } from './version.js';
 
 // Check for updates and swap if pending (blocking)
@@ -56,12 +65,16 @@ Sandbox Access:
   ssh <name>        SSH into sandbox as agent_dev
   exec <name> ...   Execute command in sandbox
   info <name>       Show detailed sandbox info
+  port              Manage port mappings
 
 Management:
   preset            Manage package presets
   template          Manage template cache
+  runtime           Manage shared VM runtime
 
 Other:
+  setup             Install root helper and permissions (requires sudo)
+  diagnose          Run system diagnostics and check configuration
   update            Check for updates
   completions       Shell completions
 
@@ -165,6 +178,32 @@ program
   .action(infoCommand);
 
 // ============================================
+// Port Mapping Commands
+// ============================================
+
+const portCmd = program.command('port').description('Manage port mappings');
+
+portCmd
+  .command('add <sandbox>')
+  .description('Add a port mapping to a sandbox')
+  .requiredOption('--host <port>', 'Host port number')
+  .requiredOption('--target <port>', 'Target port in sandbox')
+  .option('--bind <address>', 'Bind address (default: 127.0.0.1)')
+  .option('--public', 'Bind to 0.0.0.0 (all interfaces)')
+  .action(portAddCommand);
+
+portCmd
+  .command('remove <sandbox>')
+  .description('Remove a port mapping from a sandbox')
+  .requiredOption('--host <port>', 'Host port to remove')
+  .action(portRemoveCommand);
+
+portCmd
+  .command('list <sandbox>')
+  .description('List port mappings for a sandbox')
+  .action(portListCommand);
+
+// ============================================
 // Management Commands
 // ============================================
 
@@ -199,13 +238,61 @@ templateCmd
 
 templateCmd
   .command('build')
-  .description('Rebuild core template')
+  .description('[DEPRECATED] Rebuild core template — use "arig runtime init" instead')
   .option('-f, --force', 'Force rebuild even if exists')
-  .action(coreBuildCommand);
+  .action(async (opts: { force?: boolean }) => {
+    console.warn(
+      'Warning: "arig template build" is deprecated and will be removed in a future release.\n' +
+      'Use "arig runtime init" for the new rootless sandbox architecture.\n',
+    );
+    await coreBuildCommand(opts);
+  });
+
+// ============================================
+// Runtime Management Commands
+// ============================================
+
+const runtimeCmd = program.command('runtime').description('Manage shared VM runtime');
+
+runtimeCmd
+  .command('init')
+  .description('Initialize shared VM (first-time setup)')
+  .option('--cpus <n>', 'CPU cores for VM')
+  .option('--memory <size>', 'Memory for VM (e.g. 4G)')
+  .option('--disk <size>', 'Disk size for VM (e.g. 30G)')
+  .option('--binary <path>', 'Path to Linux binary to deploy')
+  .action(runtimeInitCommand);
+
+runtimeCmd
+  .command('status')
+  .description('Show runtime health status')
+  .action(runtimeStatusCommand);
+
+runtimeCmd
+  .command('upgrade')
+  .description('Upgrade runtime binary in shared VM')
+  .requiredOption('--binary <path>', 'Path to new Linux binary')
+  .action(runtimeUpgradeCommand);
+
+runtimeCmd
+  .command('repair')
+  .description('Repair shared VM runtime')
+  .option('--binary <path>', 'Path to Linux binary to redeploy')
+  .action(runtimeRepairCommand);
 
 // ============================================
 // Other Commands
 // ============================================
+
+program
+  .command('setup')
+  .description('Install root helper and permissions (requires sudo)')
+  .action(setupCommand);
+
+program
+  .command('diagnose')
+  .description('Run system diagnostics and check configuration')
+  .action(diagnoseCommand);
 
 program
   .command('update')

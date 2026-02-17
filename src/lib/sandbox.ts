@@ -21,7 +21,10 @@ export async function loadSandboxConfig(
   const dir = configDir || getConfigDir();
   const configPath = join(dir, 'sandboxes', name, 'config.yml');
   const content = await readFile(configPath, 'utf-8');
-  return parseYaml(content) as SandboxConfig;
+  const config = parseYaml(content) as SandboxConfig;
+  if (!config.tools) config.tools = [];
+  if (!config.ports) config.ports = [];
+  return config;
 }
 
 export async function listSandboxes(configDir?: string): Promise<string[]> {

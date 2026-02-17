@@ -1,7 +1,8 @@
 import React from 'react';
 import { render, Text, Box } from 'ink';
 import { listSandboxes, loadSandboxConfig } from '../lib/sandbox.js';
-import { limaList, getSandboxVMName } from '../lib/lima.js';
+import { createRuntime } from '../lib/runtime/index.js';
+import type { RuntimeInfo } from '../lib/runtime/types.js';
 import type { SandboxConfig } from '../lib/types.js';
 
 interface SandboxInfo {
@@ -52,20 +53,20 @@ function ListOutput({ sandboxes }: { sandboxes: SandboxInfo[] }) {
 export async function listCommand(): Promise<void> {
   const sandboxNames = await listSandboxes();
 
-  // Try to get VM status from lima, but don't fail if lima is not installed
-  let vms: Awaited<ReturnType<typeof limaList>> = [];
+  // Try to get VM status from runtime, but don't fail if unavailable
+  const runtime = createRuntime();
+  let runtimeInfos: RuntimeInfo[] = [];
   try {
-    vms = await limaList();
+    runtimeInfos = await runtime.list();
   } catch {
-    // Lima not installed or not available - continue without VM status
+    // Runtime not available - continue without status
   }
 
   const sandboxes: SandboxInfo[] = await Promise.all(
     sandboxNames.map(async (name) => {
       const config = await loadSandboxConfig(name);
-      const vmName = getSandboxVMName(name);
-      const vm = vms.find((v) => v.name === vmName);
-      const status = vm?.status === 'Running' ? 'running' : 'stopped';
+      const info = runtimeInfos.find((ri) => ri.sandboxName === name);
+      const status = info?.state === 'running' ? 'running' : 'stopped';
       return { config, status };
     })
   );
