@@ -41,7 +41,6 @@ It does **not** migrate or delete user data in `~/.agent-rig`.
 | `~/.agent-rig/tool-cache/index.yml` | Tool cache index | Preserved |
 | `~/.agent-rig/runtime/state.db` | Runtime state DB | Preserved |
 | `~/.agent-rig/run/*` | Runtime sockets/session files | Recreated as needed |
-| `~/.lima/*` | Lima VM disks/state | Preserved |
 
 ## 3. Post-update verification
 
@@ -85,12 +84,7 @@ rm -rf ~/.agent-rig/run
 mv ~/.agent-rig/runtime/state.db ~/.agent-rig/runtime/state.db.bak.$(date +%Y%m%d-%H%M%S) 2>/dev/null || true
 rm -f ~/.agent-rig/runtime/state.db-wal ~/.agent-rig/runtime/state.db-shm
 
-# prune template cache metadata
-arig template prune 5
 ```
-
-For Lima VM artifacts (`arig-*`, `arig-core`, `arig-template-*`, `arig-shared`),
-prefer `limactl delete --force <vm-name>` instead of deleting files directly.
 
 ## 6. If you switch install methods (npm <-> binary)
 

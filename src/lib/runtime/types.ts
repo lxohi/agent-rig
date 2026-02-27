@@ -1,12 +1,12 @@
 export type SandboxState = 'running' | 'stopped' | 'creating' | 'broken' | 'unknown';
 
 export interface RuntimeInfo {
-  /** Driver-internal name (e.g. Lima VM name). Opaque to command layer. */
+  /** Driver-internal name. Opaque to command layer. */
   name: string;
   /** Logical sandbox name that matches the config-layer name. */
   sandboxName: string;
   state: SandboxState;
-  /** Runtime backend identifier, e.g. "lima", "linux-rootless", "macos-sharedvm" */
+  /** Runtime backend identifier, e.g. "linux-rootless", "macos-sharedvm" */
   driver: string;
   /** Opaque metadata from the underlying driver */
   meta?: Record<string, unknown>;
@@ -28,12 +28,12 @@ export interface ExecResult {
 
 /**
  * RuntimeDriver is the abstraction boundary between CLI commands and the
- * underlying sandbox runtime (Lima, linux-rootless, macos-sharedvm, etc.).
+ * underlying sandbox runtime (linux-rootless, macos-sharedvm, etc.).
  *
  * Each driver implements the full sandbox lifecycle plus exec/session helpers.
  */
 export interface RuntimeDriver {
-  /** Unique identifier for this driver, e.g. "lima" */
+  /** Unique identifier for this driver, e.g. "linux-rootless" */
   readonly name: string;
 
   /** List all sandboxes visible to this driver. */

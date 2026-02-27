@@ -25,9 +25,6 @@ jobs:
       - name: Build CLI
         run: bun run build
 
-      - name: Install Lima
-        run: brew install lima
-
       - name: Run integration tests
         run: bun run test:run src/integration.test.ts
         env:

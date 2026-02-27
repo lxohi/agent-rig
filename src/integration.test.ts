@@ -143,30 +143,6 @@ describe('CLI Integration Tests', () => {
     });
   });
 
-  describe('Template Commands', () => {
-    it('lists templates (empty initially)', async () => {
-      const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
-      try {
-        const { stdout, exitCode } = await runCli(['template', 'list'], { ARIG_CONFIG_DIR: testDir });
-        expect(exitCode).toBe(0);
-        expect(stdout).toContain('No cached templates');
-      } finally {
-        await rm(testDir, { recursive: true, force: true });
-      }
-    });
-
-    it('prune with no templates does nothing', async () => {
-      const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
-      try {
-        const { stdout, exitCode } = await runCli(['template', 'prune'], { ARIG_CONFIG_DIR: testDir });
-        expect(exitCode).toBe(0);
-        expect(stdout).toContain('Nothing to prune');
-      } finally {
-        await rm(testDir, { recursive: true, force: true });
-      }
-    });
-  });
-
   describe('Completions Commands', () => {
     it('outputs bash completions', async () => {
       const { stdout, exitCode } = await runCli(['completions', 'bash']);
@@ -180,16 +156,6 @@ describe('CLI Integration Tests', () => {
       expect(exitCode).toBe(0);
       expect(stdout).toContain('#compdef arig');
       expect(stdout).toContain('_arig');
-    });
-  });
-
-  describe('Template Command', () => {
-    it('shows help for template subcommand', async () => {
-      const { stdout, exitCode } = await runCli(['template', '--help']);
-      expect(exitCode).toBe(0);
-      expect(stdout).toContain('build');
-      expect(stdout).toContain('list');
-      expect(stdout).toContain('prune');
     });
   });
 
@@ -244,22 +210,11 @@ describe('CLI Integration Tests', () => {
     });
   });
 
-  describe('Attach/SSH/Exec Commands', () => {
+  describe('Attach/Exec Commands', () => {
     it('attach shows error for non-existent sandbox', async () => {
       const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
       try {
         const { stdout, exitCode } = await runCli(['attach', 'nonexistent'], { ARIG_CONFIG_DIR: testDir });
-        expect(exitCode).toBe(1);
-        expect(stdout).toContain('not found');
-      } finally {
-        await rm(testDir, { recursive: true, force: true });
-      }
-    });
-
-    it('ssh shows error for non-existent sandbox', async () => {
-      const testDir = await mkdtemp(join(tmpdir(), 'arig-test-'));
-      try {
-        const { stdout, exitCode } = await runCli(['ssh', 'nonexistent'], { ARIG_CONFIG_DIR: testDir });
         expect(exitCode).toBe(1);
         expect(stdout).toContain('not found');
       } finally {

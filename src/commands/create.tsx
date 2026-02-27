@@ -1,37 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { execa } from 'execa';
 import { loadConfig } from '../lib/config.js';
 import { loadPresets, getPreset } from '../lib/presets.js';
-import {
-  computePackageHash,
-  computePackageHashV2,
-  loadTemplateIndex,
-  saveTemplateIndex,
-  findTemplateByHash,
-  findValidTemplate,
-  addTemplate,
-  updateTemplateUsage,
-} from '../lib/template.js';
 import { saveSandboxConfig, sandboxExists } from '../lib/sandbox.js';
-import {
-  limaStart,
-  limaStop,
-  limaExec,
-  limaClone,
-  limaCreate,
-  getSandboxVMName,
-  getTemplateVMName,
-  buildLimaConfig,
-} from '../lib/lima.js';
 import { createRuntime } from '../lib/runtime/index.js';
-import { PROVISION_SCRIPT } from '../lib/provision-script.js';
 import { resolveAliases } from '../lib/tool-aliases.js';
-import { VERSION } from '../version.js';
-import { stringify as stringifyYaml } from 'yaml';
-import { writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { TaskList, type Task } from '../components/TaskList.js';
 import { StatusLine } from '../components/StatusLine.js';
 import type { SandboxConfig } from '../lib/types.js';
@@ -76,17 +50,6 @@ async function detectGitConfig(): Promise<{ name?: string; email?: string }> {
     // Not configured
   }
   return result;
-}
-
-// Convert package name from preset format (node-20) to mise format (node@20)
-function toMisePackage(pkg: string): string {
-  // Handle formats like: node-20, python-312, java-17
-  const match = pkg.match(/^([a-z]+)-(\d+)$/);
-  if (match) {
-    return `${match[1]}@${match[2]}`;
-  }
-  // Return as-is for packages like 'uv' or already formatted 'node@20'
-  return pkg;
 }
 
 function CreateUI({ tasks, error }: { tasks: Task[]; error?: string }) {
@@ -301,9 +264,7 @@ export async function createCommand(
   }
 
   const tasks: Task[] = [
-    { label: 'Preparing core template', status: 'pending' },
-    { label: 'Preparing package template', status: 'pending' },
-    { label: 'Creating sandbox VM', status: 'pending' },
+    { label: 'Creating sandbox', status: 'pending' },
     { label: 'Configuring sandbox', status: 'pending' },
     { label: 'Cloning repository', status: 'pending' },
     { label: 'Starting Claude Code', status: 'pending' },
@@ -325,93 +286,21 @@ export async function createCommand(
   const { rerender, unmount } = render(<CreateUI tasks={tasks} />);
 
   try {
-    // Step 1: Prepare core template (auto-build if missing)
+    // Step 1: Create sandbox
     updateTask('running');
     rerender(<CreateUI tasks={tasks} />);
 
-    const allSandboxes = await runtime.list();
-    const coreVMName = getTemplateVMName('');
-    if (!allSandboxes.some((s) => s.name === coreVMName)) {
-      // Auto-build core template
-      const limaConfig = buildLimaConfig({
-        name: coreVMName,
-        cpus: config.vm.cpus,
-        memory: config.vm.memory,
-        disk: config.vm.disk,
-        provisionScript: PROVISION_SCRIPT,
-      });
-
-      // Write lima config to temp file
-      const configPath = join(tmpdir(), `${coreVMName}.yaml`);
-      await writeFile(configPath, stringifyYaml(limaConfig));
-
-      await limaCreate(coreVMName, configPath);
-      await limaStart(coreVMName);
-      await limaStop(coreVMName);
-    }
+    await runtime.create(name, {
+      packages,
+      repo,
+      git: { user: options.gitUser, token: options.gitToken, name: gitName, email: gitEmail },
+      claude: { baseUrl, authToken },
+      vm: { cpus: vmCpus, memory: vmMemory, disk: vmDisk },
+    });
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
-    // Step 2: Prepare template (find or create)
-    const packageHash = computePackageHashV2(packages);
-    const packageHashLegacy = computePackageHash(packages);
-    let templateIndex = await loadTemplateIndex();
-    let templateVMName: string;
-
-    if (packages.length === 0) {
-      // Use core template directly
-      templateVMName = coreVMName;
-    } else {
-      // Try v2 match first, then fall back to legacy hash
-      const existingTemplate =
-        findTemplateByHash(templateIndex, packageHash) ??
-        findTemplateByHash(templateIndex, packageHashLegacy);
-      if (existingTemplate) {
-        templateVMName = getTemplateVMName(existingTemplate.hash);
-        templateIndex = updateTemplateUsage(templateIndex, existingTemplate.hash);
-        await saveTemplateIndex(templateIndex);
-      } else {
-        // Create new template from core
-        templateVMName = getTemplateVMName(packageHash);
-        // Clone core and install packages
-        await limaClone(coreVMName, templateVMName);
-        await limaStart(templateVMName);
-
-        // Install packages via mise
-        for (const pkg of packages) {
-          const misePackage = toMisePackage(pkg);
-          await limaExec(templateVMName, [
-            'sudo', '-u', 'agent_dev', 'bash', '-c',
-            `source ~/.bashrc && ~/.local/bin/mise use --global ${misePackage}`,
-          ]);
-        }
-
-        await limaStop(templateVMName);
-
-        // Save to index
-        templateIndex = addTemplate(templateIndex, {
-          name: `template-${packageHash}`,
-          hash: packageHash,
-          packages,
-          created: new Date().toISOString(),
-          lastUsed: new Date().toISOString(),
-          usageCount: 1,
-          scriptHash: packageHash,
-          runtimeVersion: VERSION,
-        });
-        await saveTemplateIndex(templateIndex);
-      }
-    }
-    nextTask();
-    rerender(<CreateUI tasks={tasks} />);
-
-    // Step 3: Create sandbox VM from template
-    const sandboxVMName = getSandboxVMName(name);
-    await limaClone(templateVMName, sandboxVMName);
-    nextTask();
-    rerender(<CreateUI tasks={tasks} />);
-
-    // Step 4: Configure sandbox
+    // Step 2: Configure sandbox
     await runtime.start(name);
 
     // Configure git credentials (askpass script)
@@ -473,7 +362,7 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/claude.sh`,
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
-    // Step 5: Clone repository
+    // Step 3: Clone repository
     const cloneEnv = options.gitUser && options.gitToken
       ? 'export GIT_ASKPASS=$HOME/bin/git-askpass.sh; export GIT_TERMINAL_PROMPT=0; '
       : '';
@@ -484,7 +373,7 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/claude.sh`,
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
 
-    // Step 6: Start Claude Code
+    // Step 4: Start Claude Code
     await runtime.execRun(name, [
       'sudo', '-u', 'agent_dev',
       '/home/agent_dev/bin/start-claude.sh',

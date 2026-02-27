@@ -111,20 +111,26 @@ async function checkDependencies(): Promise<CheckResult[]> {
   }
 
   if (plat === 'darwin') {
-    for (const cmd of ['limactl', 'socat']) {
-      const exists = await commandExists(cmd);
-      results.push({
-        name: cmd,
-        status: exists ? 'ok' : 'fail',
-        detail: exists ? 'found' : 'not found — required for macOS shared VM',
-      });
+    const limactlExists = await commandExists('limactl');
+    results.push({
+      name: 'limactl',
+      status: limactlExists ? 'ok' : 'warn',
+      detail: limactlExists ? 'found' : 'not found — required for macOS shared VM runtime',
+    });
+    if (limactlExists) {
+      try {
+        const { stdout } = await execa('limactl', ['--version']);
+        results.push({ name: 'Lima version', status: 'ok', detail: stdout.trim() });
+      } catch {
+        // Already reported missing
+      }
     }
-    try {
-      const { stdout } = await execa('limactl', ['--version']);
-      results.push({ name: 'Lima version', status: 'ok', detail: stdout.trim() });
-    } catch {
-      // limactl missing already reported above
-    }
+    const socatExists = await commandExists('socat');
+    results.push({
+      name: 'socat',
+      status: socatExists ? 'ok' : 'warn',
+      detail: socatExists ? 'found' : 'not found — required for macOS shared VM runtime',
+    });
   }
 
   const gitExists = await commandExists('git');

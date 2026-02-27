@@ -93,7 +93,6 @@ It does **not** delete sandbox/config/runtime data under `~/.agent-rig`.
 | `~/.agent-rig/tool-cache/index.yml` | Tool cache index | Preserved |
 | `~/.agent-rig/runtime/state.db` | Runtime state DB | Preserved |
 | `~/.agent-rig/run/*` | Runtime sockets/session files | Recreated as needed |
-| `~/.lima/*` | Lima VM disks/state | Preserved |
 
 Note for users who also used the binary installer:
 
@@ -128,17 +127,13 @@ mv ~/.agent-rig/runtime/state.db ~/.agent-rig/runtime/state.db.bak.$(date +%Y%m%
 rm -f ~/.agent-rig/runtime/state.db-wal ~/.agent-rig/runtime/state.db-shm
 ```
 
-For template cache cleanup, prefer the built-in command:
-
-```bash
-arig template prune 5
-```
-
 ## 8. Command mapping (old -> new)
 
 | Previous workflow | New workflow |
 | --- | --- |
-| `arig template build` | Deprecated. Prefer `arig runtime init` for the new runtime flow. |
+| `arig template build` | Removed. Use `arig runtime init` for the new runtime flow. |
+| `arig template list/prune` | Removed. No longer needed (new architecture has no VM templates). |
+| `arig ssh <name>` | Removed. Use `arig exec <name> bash` or `arig attach <name>` instead. |
 | `arig list/info/start/stop/destroy/attach/exec` | Still available; now routed through runtime abstraction. |
 | N/A | `arig diagnose` for system and permission checks. |
 | N/A | `arig setup` for Linux root-helper permissions. |

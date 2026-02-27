@@ -6,14 +6,10 @@ CLI tool for isolated development sandboxes for coding agents.
 
 agent-rig (`arig`) manages sandbox lifecycle, runtime operations, and package/preset setup.
 
-This branch introduces a redesign and runtime refactor:
+Supports two runtime drivers:
 
-- Runtime driver abstraction for sandbox operations.
-- New operational commands: `setup`, `diagnose`, `port`, and `runtime`.
-- `template build` deprecation path for the new runtime-oriented architecture.
-- Backward-compatible sandbox config loading for new fields (`runtime`, `tools`, `ports`).
-
-Current default runtime remains Lima-based, while shared-VM/rootless runtime flows are now available through runtime management commands.
+- **Linux**: rootless sandboxes via dedicated users + rootless Docker (`linux-rootless`)
+- **macOS**: shared Lima VM with rootless sandboxes inside (`macos-sharedvm`)
 
 ## Installation
 
@@ -36,7 +32,7 @@ This installs to `~/.arig/` and adds `~/.arig/bin` to PATH.
 ## Prerequisites
 
 - macOS (Intel or Apple Silicon) or Linux (x64/arm64)
-- [Lima](https://lima-vm.io/) for current default runtime and macOS shared-VM runtime commands
+- [Lima](https://lima-vm.io/) — required only for macOS shared VM runtime
 - Node.js `>=20` (npm install path)
 
 ## Updating
@@ -53,7 +49,7 @@ arig create my-project --repo https://github.com/user/repo --preset fullstack-de
 # 2. Check status and connect
 arig list
 arig info my-project
-arig ssh my-project
+arig attach my-project
 
 # 3. Optional: add a port mapping
 arig port add my-project --host 18080 --target 8080
@@ -82,7 +78,6 @@ arig destroy my-project
 | Command | Description |
 | --- | --- |
 | `arig attach <name>` | Attach to sandbox primary interactive session |
-| `arig ssh <name>` | Open a shell as `agent_dev` |
 | `arig exec <name> <cmd...>` | Run a command in a sandbox |
 
 ### Port management
@@ -106,13 +101,10 @@ arig destroy my-project
 | `arig update` | Check and download CLI update (binary-install flow) |
 | `arig completions install` | Install shell completions |
 
-### Template and presets
+### Presets
 
 | Command | Description |
 | --- | --- |
-| `arig template list` | List cached templates |
-| `arig template prune [n]` | Keep only `n` newest templates |
-| `arig template build` | Deprecated alias for rebuilding template/core path |
 | `arig preset list` | List presets |
 | `arig preset create <name> <packages>` | Create custom preset |
 | `arig preset delete <name>` | Delete custom preset |

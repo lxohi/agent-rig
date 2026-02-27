@@ -3,15 +3,12 @@ import { program } from 'commander';
 import { checkAndSwap } from './lib/updater.js';
 import { listCommand } from './commands/list.js';
 import { infoCommand } from './commands/info.js';
-import { coreBuildCommand } from './commands/core.js';
 import { createCommand } from './commands/create.js';
 import { startCommand } from './commands/start.js';
 import { stopCommand } from './commands/stop.js';
 import { destroyCommand } from './commands/destroy.js';
 import { attachCommand } from './commands/attach.js';
-import { sshCommand } from './commands/ssh.js';
 import { execCommand } from './commands/exec.js';
-import { templateListCommand, templatePruneCommand } from './commands/template.js';
 import {
   presetListCommand,
   presetCreateCommand,
@@ -62,14 +59,12 @@ Sandbox Lifecycle:
 
 Sandbox Access:
   attach <name>     Attach to Claude Code tmux session
-  ssh <name>        SSH into sandbox as agent_dev
   exec <name> ...   Execute command in sandbox
   info <name>       Show detailed sandbox info
   port              Manage port mappings
 
 Management:
   preset            Manage package presets
-  template          Manage template cache
   runtime           Manage shared VM runtime
 
 Other:
@@ -163,11 +158,6 @@ program
   .action(attachCommand);
 
 program
-  .command('ssh <name>')
-  .description('SSH into sandbox as agent_dev')
-  .action(sshCommand);
-
-program
   .command('exec <name> <cmd...>')
   .description('Execute command in sandbox')
   .action(execCommand);
@@ -223,30 +213,6 @@ presetCmd
   .command('delete <name>')
   .description('Delete a custom preset')
   .action(presetDeleteCommand);
-
-const templateCmd = program.command('template').description('Template cache management');
-
-templateCmd
-  .command('list')
-  .description('List cached templates')
-  .action(templateListCommand);
-
-templateCmd
-  .command('prune [n]')
-  .description('Keep only n most recent templates (default: 5)')
-  .action(templatePruneCommand);
-
-templateCmd
-  .command('build')
-  .description('[DEPRECATED] Rebuild core template — use "arig runtime init" instead')
-  .option('-f, --force', 'Force rebuild even if exists')
-  .action(async (opts: { force?: boolean }) => {
-    console.warn(
-      'Warning: "arig template build" is deprecated and will be removed in a future release.\n' +
-      'Use "arig runtime init" for the new rootless sandbox architecture.\n',
-    );
-    await coreBuildCommand(opts);
-  });
 
 // ============================================
 // Runtime Management Commands
