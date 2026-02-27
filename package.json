@@ -14,6 +14,7 @@
     "build:binary:darwin-x64": "bun build --compile --target=bun-darwin-x64 --outfile=arig-darwin-x64 src/index.tsx",
     "build:binary:linux-x64": "bun build --compile --target=bun-linux-x64 --outfile=arig-linux-x64 src/index.tsx",
     "build:binary:linux-arm64": "bun build --compile --target=bun-linux-arm64 --outfile=arig-linux-arm64 src/index.tsx",
+    "start": "bun run src/index.tsx",
     "dev": "tsc --watch",
     "test": "vitest",
     "test:run": "vitest run",
