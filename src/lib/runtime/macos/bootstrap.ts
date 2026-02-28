@@ -44,7 +44,7 @@ echo "=== Installing base packages ==="
 apt-get update
 apt-get install -y \\
   apt-transport-https ca-certificates curl gnupg \\
-  git tmux jq htop vim unzip wget \\
+  git tmux jq htop vim unzip wget socat \\
   build-essential uidmap dbus-user-session \\
   apparmor apparmor-utils
 
