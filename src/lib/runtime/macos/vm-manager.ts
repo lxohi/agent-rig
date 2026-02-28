@@ -224,8 +224,6 @@ export async function readVMSchema(): Promise<number | undefined> {
  * Write version and schema markers inside the VM.
  */
 export async function writeVMMarkers(version: string): Promise<void> {
-  await vmExec(['sudo', 'tee', VM_VERSION_MARKER], { reject: false });
-  // Use shell to write content
   await vmExec([
     'sudo', 'bash', '-c',
     `echo '${version}' > ${VM_VERSION_MARKER} && echo '${VM_SCHEMA_VERSION}' > ${VM_SCHEMA_MARKER}`,
