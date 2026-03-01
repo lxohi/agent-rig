@@ -192,8 +192,8 @@ describe('vm-manager edge cases', () => {
   describe('writeVMMarkers', () => {
     it('writes version and schema via vmExec', async () => {
       await writeVMMarkers('1.2.3');
-      // Should call vmExec at least twice (tee + bash -c)
-      expect(execa).toHaveBeenCalledTimes(2);
+      // Should call vmExec once (bash -c to write both markers)
+      expect(execa).toHaveBeenCalledTimes(1);
       const calls = vi.mocked(execa).mock.calls;
       const bashCall = calls.find(c =>
         Array.isArray(c[1]) && c[1].includes('bash'),

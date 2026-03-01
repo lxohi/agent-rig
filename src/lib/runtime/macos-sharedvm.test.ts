@@ -37,6 +37,7 @@ vi.mock('./macos/vm-manager.js', () => ({
 }));
 
 vi.mock('./macos/bootstrap.js', () => ({
+  runtimeInit: vi.fn().mockResolvedValue(undefined),
   runtimeStatus: vi.fn(),
 }));
 
@@ -113,12 +114,18 @@ describe('MacOSSharedVMDriver', () => {
       expect(mockStartVM).toHaveBeenCalled();
     });
 
-    it('throws when VM is not found', async () => {
+    it('auto-initializes when VM is not found', async () => {
       mockGetVMStatus.mockResolvedValueOnce({ name: 'arig-shared', status: 'not_found' });
 
-      await expect(driver.inspect('test-sandbox')).rejects.toThrow(
-        'Shared VM not found',
-      );
+      const { runtimeInit } = vi.mocked(await import('./macos/bootstrap.js'));
+      const { DaemonClient: MockClient } = vi.mocked(await import('./daemon-client.js'));
+      const mockCall = vi.fn().mockResolvedValue({ state: 'running' });
+      const mockClose = vi.fn();
+      MockClient.mockImplementation(() => ({ call: mockCall, close: mockClose }) as any);
+
+      await driver.inspect('test-sandbox');
+
+      expect(runtimeInit).toHaveBeenCalled();
     });
 
     it('throws when VM is broken', async () => {
