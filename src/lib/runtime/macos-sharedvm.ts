@@ -7,6 +7,7 @@ import {
   getVMStatus,
   startVM,
 } from './macos/vm-manager.js';
+import { runtimeInit } from './macos/bootstrap.js';
 import { execa } from 'execa';
 
 /** Default arigd socket path inside the shared VM. */
@@ -95,7 +96,11 @@ export class MacOSSharedVMDriver implements RuntimeDriver {
   /**
    * Ensure the shared VM is running. Auto-starts if stopped.
    */
-  private async ensureVMRunning(): Promise<void> {
+  private async ensureVMRunning(initOpts?: {
+    cpus?: number;
+    memory?: string;
+    disk?: string;
+  }): Promise<void> {
     const vmInfo = await getVMStatus();
 
     if (vmInfo.status === 'running') return;
@@ -112,9 +117,14 @@ export class MacOSSharedVMDriver implements RuntimeDriver {
     }
 
     if (vmInfo.status === 'not_found') {
-      throw new Error(
-        'Shared VM not found. Run "arig runtime init" to set up the macOS runtime.',
-      );
+      logger.info('Shared VM not found, auto-initializing runtime', {
+        component: 'macos-sharedvm',
+        event: 'vm.auto_init',
+      });
+      await runtimeInit(initOpts);
+      // Invalidate cached SSH config since this is a fresh VM
+      this.sshConfig = undefined;
+      return;
     }
 
     throw new Error(
@@ -192,7 +202,8 @@ export class MacOSSharedVMDriver implements RuntimeDriver {
   }
 
   async create(sandboxName: string, opts?: Record<string, unknown>): Promise<void> {
-    await this.ensureVMRunning();
+    const vmOpts = opts?.vm as { cpus?: number; memory?: string; disk?: string } | undefined;
+    await this.ensureVMRunning(vmOpts);
     const client = await this.createClient();
 
     const logFields = {

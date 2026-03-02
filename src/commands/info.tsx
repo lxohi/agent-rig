@@ -13,7 +13,7 @@ function InfoOutput({
     repo: string;
     branch: string;
     packages: string[];
-    vm: { cpus: number; memory: string; disk: string };
+    vm?: { cpus: number; memory: string; disk: string };
     created: string;
   };
   status: string;
@@ -46,11 +46,15 @@ function InfoOutput({
           <Text key={pkg}>  • {pkg}</Text>
         ))
       )}
-      <Text />
-      <Text bold>Resources:</Text>
-      <Text>  CPUs:   {config.vm.cpus}</Text>
-      <Text>  Memory: {config.vm.memory}</Text>
-      <Text>  Disk:   {config.vm.disk}</Text>
+      {config.vm && (
+        <>
+          <Text />
+          <Text bold>Resources:</Text>
+          <Text>  CPUs:   {config.vm.cpus}</Text>
+          <Text>  Memory: {config.vm.memory}</Text>
+          <Text>  Disk:   {config.vm.disk}</Text>
+        </>
+      )}
     </Box>
   );
 }

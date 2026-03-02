@@ -51,7 +51,7 @@ export interface SandboxConfig {
   branch: string;
   packages: string[];
   preset?: string;
-  vm: VMConfig;
+  vm?: VMConfig;
   git?: {
     user?: string;
     token?: string;

@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { execa } from 'execa';
+import { platform } from 'node:os';
 import { loadConfig } from '../lib/config.js';
 import { loadPresets, getPreset } from '../lib/presets.js';
 import { saveSandboxConfig, sandboxExists } from '../lib/sandbox.js';
@@ -77,9 +78,9 @@ interface ConfirmParams {
   baseUrlDetected?: boolean;
   authToken?: boolean;
   authTokenDetected?: boolean;
-  cpus: number;
-  memory: string;
-  disk: string;
+  cpus?: number;
+  memory?: string;
+  disk?: string;
 }
 
 function DetectedTag() {
@@ -138,13 +139,15 @@ function ConfirmUI({
         <Text>    Token:     {params.authToken ? <><Text dimColor>&lt;provided&gt;</Text>{params.authTokenDetected && <DetectedTag />}</> : <Text dimColor>(not set)</Text>}</Text>
       </Box>
 
-      {/* VM Config */}
+      {/* VM Config — only relevant on macOS (Lima shared VM) */}
+      {params.cpus !== undefined && (
       <Box flexDirection="column">
         <Text bold color="cyan">  VM Resources</Text>
         <Text>    CPUs:      {params.cpus}</Text>
         <Text>    Memory:    {params.memory}</Text>
         <Text>    Disk:      {params.disk} <Text dimColor>(max, grows as needed)</Text></Text>
       </Box>
+      )}
 
       <Text>
         <Text dimColor>Press</Text> <Text color="green">Y</Text> <Text dimColor>to continue,</Text>{' '}
@@ -231,10 +234,11 @@ export async function createCommand(
   const baseUrl = options.baseUrl || detectedBaseUrl;
   const authToken = options.authToken || detectedAuthToken;
 
-  // Resolve VM configuration
-  const vmCpus = options.cpus ? parseInt(options.cpus) : config.vm.cpus;
-  const vmMemory = options.memory || config.vm.memory;
-  const vmDisk = options.disk || config.vm.disk;
+  // Resolve VM configuration (only relevant on macOS)
+  const isMacOS = platform() === 'darwin';
+  const vmCpus = isMacOS ? (options.cpus ? parseInt(options.cpus) : config.vm.cpus) : undefined;
+  const vmMemory = isMacOS ? (options.memory || config.vm.memory) : undefined;
+  const vmDisk = isMacOS ? (options.disk || config.vm.disk) : undefined;
 
   // Confirm parameters before proceeding
   const confirmed = await waitForConfirmation({
@@ -295,7 +299,7 @@ export async function createCommand(
       repo,
       git: { user: options.gitUser, token: options.gitToken, name: gitName, email: gitEmail },
       claude: { baseUrl, authToken },
-      vm: { cpus: vmCpus, memory: vmMemory, disk: vmDisk },
+      vm: isMacOS ? { cpus: vmCpus, memory: vmMemory, disk: vmDisk } : undefined,
     });
     nextTask();
     rerender(<CreateUI tasks={tasks} />);
@@ -394,11 +398,11 @@ chown agent_dev:agent_dev /home/agent_dev/.bashrc.d/claude.sh`,
       branch: 'main',
       packages,
       preset: options.preset,
-      vm: {
-        cpus: vmCpus,
-        memory: vmMemory,
-        disk: vmDisk,
-      },
+      vm: isMacOS ? {
+        cpus: vmCpus!,
+        memory: vmMemory!,
+        disk: vmDisk!,
+      } : undefined,
       git: {
         user: options.gitUser,
         token: options.gitToken ? '***' : undefined, // Don't store actual token
